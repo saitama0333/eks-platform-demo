@@ -3,6 +3,11 @@ output "cluster_name" {
   value       = module.eks.cluster_name
 }
 
+output "cluster_arn" {
+  description = "The ARN of the EKS cluster"
+  value       = module.eks.cluster_arn
+}
+
 output "cluster_endpoint" {
   description = "EKS cluster API endpoint"
   value       = module.eks.cluster_endpoint

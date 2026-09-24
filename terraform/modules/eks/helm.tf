@@ -33,3 +33,48 @@ resource "helm_release" "aws_load_balancer_controller" {
     }
   ]
 }
+
+resource "helm_release" "argocd" {
+  name       = "argocd"
+  repository = "https://argoproj.github.io/argo-helm"
+  chart      = "argo-cd"
+  version    = "10.9.2"
+
+  namespace        = "argocd"
+  create_namespace = true
+
+  wait    = true
+  timeout = 600
+}
+
+resource "helm_release" "kube_prometheus_stack" {
+  name       = "kube-prometheus-stack"
+  repository = "https://prometheus-community.github.io/helm-charts"
+  chart      = "kube-prometheus-stack"
+  version    = "91.5.1"
+
+  namespace        = "monitoring"
+  create_namespace = true
+
+  wait    = true
+  timeout = 600
+
+  values = [
+    yamlencode({
+      grafana = {
+        enabled = true
+      }
+
+      prometheus = {
+        prometheusSpec = {
+          retention = "7d"
+        }
+      }
+
+      alertmanager = {
+        enabled = true
+      }
+    })
+  ]
+}
+

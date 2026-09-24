@@ -42,7 +42,22 @@ module "eks" {
   node_instance_types = ["t3.small"]
 
   node_min_size     = 2
-  node_max_size     = 3
-  node_desired_size = 2
+  node_max_size     = 6
+  node_desired_size = 4
 }
 
+module "karpenter" {
+  source = "../../modules/karpenter"
+
+  aws_region   = var.aws_region
+  cluster_name = module.eks.cluster_name
+  cluster_arn  = module.eks.cluster_arn
+
+  tags = {
+    Project     = var.project_name
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+  }
+
+  depends_on = [module.eks]
+}

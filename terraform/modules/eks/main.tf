@@ -81,6 +81,7 @@ module "eks" {
 
   name               = "${var.project_name}-${var.environment}"
   kubernetes_version = var.cluster_version
+  
 
   vpc_id     = var.vpc_id
   subnet_ids = var.private_subnet_ids
@@ -94,37 +95,37 @@ module "eks" {
 
   enable_cluster_creator_admin_permissions = true
 
-addons = {
-  vpc-cni = {
-    most_recent    = true
-    before_compute = true
-  }
-
-  coredns = {
-    most_recent = true
-  }
-
-  kube-proxy = {
-    most_recent = true
-  }
-
-  eks-pod-identity-agent = {
-    most_recent = true
-  }
-
-  aws-ebs-csi-driver = {
-  most_recent = true
-
-  pod_identity_association = [
-    {
-      role_arn        = aws_iam_role.ebs_csi.arn
-      service_account = "ebs-csi-controller-sa"
+  addons = {
+    vpc-cni = {
+      most_recent    = true
+      before_compute = true
     }
-  ]
 
-  resolve_conflicts_on_create = "OVERWRITE"
-  resolve_conflicts_on_update = "OVERWRITE"
-  }
+    coredns = {
+      most_recent = true
+    }
+
+    kube-proxy = {
+      most_recent = true
+    }
+
+    eks-pod-identity-agent = {
+      most_recent = true
+    }
+
+    aws-ebs-csi-driver = {
+      most_recent = true
+
+      pod_identity_association = [
+        {
+          role_arn        = aws_iam_role.ebs_csi.arn
+          service_account = "ebs-csi-controller-sa"
+        }
+      ]
+
+      resolve_conflicts_on_create = "OVERWRITE"
+      resolve_conflicts_on_update = "OVERWRITE"
+    }
 
   }
 
@@ -145,7 +146,7 @@ addons = {
       disk_size = 20
 
       iam_role_additional_policies = {
-      AmazonSSMManagedInstanceCore = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+        AmazonSSMManagedInstanceCore = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
       }
 
       labels = {
@@ -159,6 +160,10 @@ addons = {
         ManagedBy   = "Terraform"
       }
     }
+  }
+
+  security_group_tags = {
+  "karpenter.sh/discovery" = "${var.project_name}-${var.environment}"
   }
 
   tags = {
