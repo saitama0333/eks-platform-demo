@@ -81,7 +81,7 @@ module "eks" {
 
   name               = "${var.project_name}-${var.environment}"
   kubernetes_version = var.cluster_version
-  
+
 
   vpc_id     = var.vpc_id
   subnet_ids = var.private_subnet_ids
@@ -163,7 +163,11 @@ module "eks" {
   }
 
   security_group_tags = {
-  "karpenter.sh/discovery" = "${var.project_name}-${var.environment}"
+    "karpenter.sh/discovery" = "${var.project_name}-${var.environment}"
+  }
+
+  node_security_group_tags = {
+    "karpenter.sh/discovery" = "${var.project_name}-${var.environment}"
   }
 
   tags = {

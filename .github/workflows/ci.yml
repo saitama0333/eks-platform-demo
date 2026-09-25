@@ -1,0 +1,229 @@
+name: applications-ci-and-publish
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  secrets:
+    name: Scan repository secrets
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install and run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  changes:
+    name: Detect application changes
+    runs-on: ubuntu-latest
+    outputs:
+      applications: ${{ steps.detect.outputs.applications }}
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect app or workflow changes
+        id: detect
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            echo "applications=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          base="$BEFORE_SHA"
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            base="$BASE_SHA"
+          fi
+
+          if [[ -z "$base" || "$base" =~ ^0+$ ]]; then
+            echo "applications=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if git diff --name-only "$base" "$HEAD_SHA" | grep -Eq '^(apps/|\.github/workflows/ci\.yml$)'; then
+            echo "applications=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "applications=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  test:
+    name: Test, build, and scan ${{ matrix.app }}
+    needs: [secrets, changes]
+    if: needs.changes.outputs.applications == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [python-demo, java-demo, nginx-demo]
+    env:
+      APP_NAME: ${{ matrix.app }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        if: matrix.app == 'python-demo'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: apps/python-demo/requirements.txt
+
+      - name: Install Python dependencies
+        if: matrix.app == 'python-demo'
+        run: python -m pip install -r apps/python-demo/requirements.txt
+
+      - name: Test Python app
+        if: matrix.app == 'python-demo'
+        run: python -m unittest discover -s apps/python-demo -p 'test_*.py' -v
+
+      - name: Audit Python dependencies
+        if: matrix.app == 'python-demo'
+        run: |
+          python -m pip install pip-audit
+          pip-audit -r apps/python-demo/requirements.txt
+
+      - name: Set up Java and Maven cache
+        if: matrix.app == 'java-demo'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+          cache-dependency-path: apps/java-demo/pom.xml
+
+      - name: Test Java app
+        if: matrix.app == 'java-demo'
+        run: mvn --batch-mode --no-transfer-progress -f apps/java-demo/pom.xml verify
+
+      - name: Build application image
+        run: docker build --file "apps/$APP_NAME/Dockerfile" --tag "eks-platform-demo:$APP_NAME-test" "apps/$APP_NAME"
+
+      - name: Scan image for critical vulnerabilities
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: eks-platform-demo:${{ matrix.app }}-test
+          format: table
+          vuln-type: os,library
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+  publish:
+    name: Publish ${{ matrix.app }} image and create GitOps PR
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.applications == 'true'
+    needs: [changes, test]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [python-demo, java-demo, nginx-demo]
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write
+    env:
+      APP_NAME: ${{ matrix.app }}
+      AWS_REGION: ap-south-1
+      ECR_REPOSITORY: eks-platform-demo/dev/${{ matrix.app }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure AWS credentials using GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Python for GitOps manifest update
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build and push immutable commit-tagged image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          if aws ecr describe-images \
+            --repository-name "$ECR_REPOSITORY" \
+            --image-ids "imageTag=$IMAGE_TAG" >/dev/null 2>&1; then
+            echo "Immutable image tag already exists; reusing it."
+          else
+            docker build \
+              --file "apps/$APP_NAME/Dockerfile" \
+              --tag "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" \
+              "apps/$APP_NAME"
+            docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          fi
+          echo "IMAGE_URI=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> "$GITHUB_ENV"
+
+      - name: Create image promotion pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          app_name = os.environ["APP_NAME"]
+          manifest = Path(f"platform/apps/{app_name}/deployment.yaml")
+          content = manifest.read_text()
+          image_line = f"          image: {os.environ['IMAGE_URI']}"
+          updated, replacements = re.subn(
+              r"(?m)^          image: .+$", image_line, content, count=1
+          )
+          if replacements != 1:
+              raise SystemExit(f"Expected one image line in {manifest}")
+          manifest.write_text(updated)
+          PY
+
+          if ! git diff --quiet -- "platform/apps/$APP_NAME/deployment.yaml"; then
+            branch="deploy/$APP_NAME-${GITHUB_SHA::7}"
+            existing_pr=$(gh pr list --head "$branch" --state open --json url --jq '.[0].url // empty')
+            if [ -n "$existing_pr" ]; then
+              echo "Promotion PR already exists: $existing_pr"
+              exit 0
+            fi
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add "platform/apps/$APP_NAME/deployment.yaml"
+            git checkout -b "$branch"
+            git commit -m "chore(gitops): deploy $APP_NAME ${GITHUB_SHA::7}"
+            git push --set-upstream origin "$branch"
+            gh pr create \
+              --base main \
+              --head "$branch" \
+              --title "Deploy $APP_NAME ${GITHUB_SHA::7}" \
+              --body "Promote the tested $APP_NAME image ${IMAGE_URI}. Merge to let Argo CD deploy it."
+          fi

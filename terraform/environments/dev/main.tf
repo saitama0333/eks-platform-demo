@@ -61,3 +61,5 @@ module "karpenter" {
 
   depends_on = [module.eks]
 }
+
+
