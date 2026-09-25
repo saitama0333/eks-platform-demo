@@ -76,8 +76,7 @@ resource "aws_iam_role_policy_attachment" "aws_load_balancer_controller" {
 }
 
 module "eks" {
-  source  = "terraform-aws-modules/eks/aws"
-  version = "~> 21.0"
+  source = "git::https://github.com/terraform-aws-modules/terraform-aws-eks.git?ref=v21.0.0"
 
   name               = "${var.project_name}-${var.environment}"
   kubernetes_version = var.cluster_version
