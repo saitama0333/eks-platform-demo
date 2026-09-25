@@ -7,7 +7,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/saitama0333/eks-platform-demo.git
-    targetRevision: main
+    targetRevision: develop
     path: platform/argocd/apps
     directory:
       recurse: false

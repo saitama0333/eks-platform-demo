@@ -7,10 +7,10 @@ spec:
   project: default
   source:
     repoURL: https://github.com/saitama0333/eks-platform-demo.git
-    targetRevision: main
-    path: platform/apps/nginx-demo
-    directory:
-      recurse: false
+    targetRevision: develop
+    path: helm/apps/nginx-demo
+    helm:
+      releaseName: nginx-demo
   destination:
     server: https://kubernetes.default.svc
     namespace: default

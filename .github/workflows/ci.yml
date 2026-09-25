@@ -4,7 +4,7 @@ on:
   pull_request:
   push:
     branches:
-      - main
+      - develop
   workflow_dispatch:
 
 permissions:
@@ -67,6 +67,30 @@ jobs:
           else
             echo "applications=false" >> "$GITHUB_OUTPUT"
           fi
+
+  helm-lint:
+    name: Lint and render application Helm charts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.17.3
+
+      - name: Lint charts
+        run: helm lint helm/apps/python-demo helm/apps/java-demo helm/apps/nginx-demo
+
+      - name: Render charts
+        shell: bash
+        run: |
+          for app in python-demo java-demo nginx-demo; do
+            helm template "$app" "helm/apps/$app" \
+              --set image.repository=example.invalid/demo \
+              --set image.tag=ci-check >/dev/null
+          done
 
   test:
     name: Test, build, and scan ${{ matrix.app }}
@@ -133,8 +157,8 @@ jobs:
 
   publish:
     name: Publish ${{ matrix.app }} image and create GitOps PR
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.applications == 'true'
-    needs: [changes, test]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop' && needs.changes.outputs.applications == 'true'
+    needs: [changes, test, helm-lint]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -197,18 +221,21 @@ jobs:
           from pathlib import Path
 
           app_name = os.environ["APP_NAME"]
-          manifest = Path(f"platform/apps/{app_name}/deployment.yaml")
+          manifest = Path(f"helm/apps/{app_name}/values.yaml")
           content = manifest.read_text()
-          image_line = f"          image: {os.environ['IMAGE_URI']}"
-          updated, replacements = re.subn(
-              r"(?m)^          image: .+$", image_line, content, count=1
+          repository, tag = os.environ["IMAGE_URI"].rsplit(":", 1)
+          updated, repository_replacements = re.subn(
+            r"(?m)^  repository: .+$", f"  repository: {repository}", content, count=1
           )
-          if replacements != 1:
-              raise SystemExit(f"Expected one image line in {manifest}")
+          updated, tag_replacements = re.subn(
+            r"(?m)^  tag: .+$", f'  tag: "{tag}"', updated, count=1
+          )
+          if repository_replacements != 1 or tag_replacements != 1:
+            raise SystemExit(f"Expected image.repository and image.tag in {manifest}")
           manifest.write_text(updated)
           PY
 
-          if ! git diff --quiet -- "platform/apps/$APP_NAME/deployment.yaml"; then
+          if ! git diff --quiet -- "helm/apps/$APP_NAME/values.yaml"; then
             branch="deploy/$APP_NAME-${GITHUB_SHA::7}"
             existing_pr=$(gh pr list --head "$branch" --state open --json url --jq '.[0].url // empty')
             if [ -n "$existing_pr" ]; then
@@ -217,12 +244,12 @@ jobs:
             fi
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add "platform/apps/$APP_NAME/deployment.yaml"
+            git add "helm/apps/$APP_NAME/values.yaml"
             git checkout -b "$branch"
             git commit -m "chore(gitops): deploy $APP_NAME ${GITHUB_SHA::7}"
             git push --set-upstream origin "$branch"
             gh pr create \
-              --base main \
+              --base develop \
               --head "$branch" \
               --title "Deploy $APP_NAME ${GITHUB_SHA::7}" \
               --body "Promote the tested $APP_NAME image ${IMAGE_URI}. Merge to let Argo CD deploy it."

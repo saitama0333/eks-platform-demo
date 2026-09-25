@@ -2,7 +2,7 @@ Terraform-provisioned Amazon EKS platform demo with Python Flask, Java/Maven, an
 
 ## Architecture
 
-GitHub Actions scans repository history for secrets with Gitleaks, tests each application, builds its app-local Dockerfile, and scans images on PRs. On pushes to `main`, it assumes a tightly scoped AWS role via GitHub OIDC, publishes immutable SHA-tagged images to per-app ECR repositories, then opens GitOps image-promotion PRs. After those PRs merge, Argo CD deploys the images.
+GitHub Actions scans repository history for secrets with Gitleaks, tests each application, builds its app-local Dockerfile, and scans images on PRs. On pushes to `develop`, it assumes a tightly scoped AWS role via GitHub OIDC, publishes immutable SHA-tagged images to per-app ECR repositories, then opens GitOps image-promotion PRs against `develop`. After those PRs merge, Argo CD deploys the images.
 
 Terraform provisions VPC, EKS, ECR, IAM, S3, and foundational Helm releases. Argo CD reconciles Kubernetes add-ons and the sample apps from `platform/`.
 
@@ -23,12 +23,16 @@ apps/
   python-demo/                Flask app, tests, dependencies, Dockerfile
   java-demo/                  Java 21/Maven app, JUnit tests, Dockerfile
   nginx-demo/                 Static site, NGINX config, Dockerfile
+helm/apps/
+  python-demo/                Local Helm chart for the Python app
+  java-demo/                  Local Helm chart for the Java app
+  nginx-demo/                 Local Helm chart for the NGINX app
 platform/
   argocd/root.yaml            App-of-apps bootstrap
-  argocd/apps/                Argo CD Applications (charts and GitOps)
+  argocd/apps/                Argo CD Applications (point to local charts or upstream charts)
   karpenter/                  EC2NodeClass and NodePools
   secrets/                    External Secrets store and demo secret
-  apps/<name>/                Per-app Kubernetes Deployment and Service
+  apps/                       App deployments are rendered from helm/apps/ charts
 README.md
 ```
 
@@ -53,9 +57,9 @@ README.md
 
 1. Confirm `github_repository` in `terraform/environments/dev/variables.tf` is your actual GitHub `owner/repository`. AWS supports one GitHub Actions OIDC provider URL per account. If it already exists, import it to this state before applying: `terraform import module.container_registry.aws_iam_openid_connect_provider.github arn:aws:iam::<account-id>:oidc-provider/token.actions.githubusercontent.com`.
 2. From `terraform/environments/dev`, run `terraform init`, inspect `terraform plan`, then `terraform apply`. Terraform creates EKS, three ECR repositories, the GitHub OIDC role, Argo CD, Karpenter, the Velero bucket, and Pod Identity roles. Outputs include `sample_app_ecr_repositories` and `github_actions_ecr_role_arn`. If Registry requests time out, check DNS/proxy access to `registry.terraform.io` and retry.
-3. In GitHub repository settings, add the Actions **variable** `AWS_ROLE_ARN` with the value of `terraform output -raw github_actions_ecr_role_arn`. No AWS access keys are needed. Ensure Actions are allowed to create pull requests and the `GITHUB_TOKEN` has repository contents and pull-request write permissions. Protect `main`; review and merge each image promotion PR.
-4. Push changes under `apps/` to `main`. Actions tests, builds, and scans the Python, Java, and NGINX matrix; the publish job pushes immutable commit-SHA images to all three ECR repositories and creates per-app PRs updating `platform/apps/<app>/deployment.yaml`. Review and merge the PRs to promote images.
-5. Apply `platform/argocd/root.yaml` to the cluster. Argo CD begins reconciling platform add-ons and the three sample apps using the images pinned in Git. Update the repository URL and branch in the Argo CD Application manifests if you fork or rename this repo.
+3. In GitHub repository settings, add the Actions **variable** `AWS_ROLE_ARN` with the value of `terraform output -raw github_actions_ecr_role_arn`. No AWS access keys are needed. Ensure Actions are allowed to create pull requests and the `GITHUB_TOKEN` has repository contents and pull-request write permissions. Protect `develop`; review and merge each image promotion PR.
+4. Push changes under `apps/` to `develop`. Actions tests, builds, and scans the Python, Java, and NGINX matrix; it also lints and renders the local charts under `helm/apps/`. The publish job pushes immutable commit-SHA images to all three ECR repositories and creates per-app PRs updating `helm/apps/<app>/values.yaml`. Review and merge the PRs to promote images.
+5. Apply `platform/argocd/root.yaml` to the cluster. Argo CD begins reconciling platform add-ons and the three sample apps using the images pinned in Helm values in Git. Update the repository URL and branch in the Argo CD Application manifests if you fork or rename this repo.
 6. To exercise External Secrets, create AWS Secrets Manager secret `eks-platform-demo/dev/demo-app` in `ap-south-1` with JSON fields `username` and `password`. Never put secret values in Git.
 
 The Python and Java samples emit OpenTelemetry traces to `opentelemetry-collector.monitoring.svc.cluster.local:4317` (gRPC); the NGINX sample serves a static page. Traces are sent to Tempo; Grafana has Tempo configured as a data source. No custom domain or public HTTPS endpoint is required.
@@ -72,6 +76,6 @@ Velero currently backs up Kubernetes resources and file-system data through its 
 
 ### Deployment locations and access
 
-Terraform-managed Helm releases are centralized in `terraform/environments/dev/helm.tf`. Helm charts managed by GitOps are centralized as Argo CD Application manifests in `platform/argocd/apps/`; the Terraform bootstrap of Argo CD remains in the environment Helm file so Argo CD can start before it manages other applications. `terraform/environments/dev/outputs.tf` contains environment outputs.
+Terraform-managed Helm releases are centralized in `terraform/environments/dev/helm.tf`. The Python, Java, and NGINX application charts are maintained in `helm/apps/`; their Argo CD Applications live in `platform/argocd/apps/`. Platform add-on Applications there reference upstream Helm repositories (for example, Tempo and Velero). Argo CD bootstrap remains Terraform-managed so it can start before managing other applications. `terraform/environments/dev/outputs.tf` contains environment outputs.
 
 A custom domain and public HTTPS endpoint are not required. These applications use in-cluster Kubernetes Services; no Ingress or public LoadBalancer is configured for Argo CD, Grafana, Tempo, or the OpenTelemetry Collector. Use `kubectl port-forward` for local access during the demo. The AWS Load Balancer Controller being installed does not create an Internet-facing endpoint by itself.

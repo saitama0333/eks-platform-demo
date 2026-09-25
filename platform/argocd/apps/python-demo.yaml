@@ -7,10 +7,10 @@ spec:
   project: default
   source:
     repoURL: https://github.com/saitama0333/eks-platform-demo.git
-    targetRevision: main
-    path: platform/apps/python-demo
-    directory:
-      recurse: false
+    targetRevision: develop
+    path: helm/apps/python-demo
+    helm:
+      releaseName: python-demo
   destination:
     server: https://kubernetes.default.svc
     namespace: default
