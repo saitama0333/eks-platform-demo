@@ -1,0 +1,33 @@
+# Copy to terraform.tfvars and replace the public API CIDR with your current
+# workstation/VPN public egress IP in CIDR notation (usually x.x.x.x/32).
+cluster_endpoint_public_access_cidrs = ["REPLACE_WITH_YOUR_PUBLIC_IP/32"]
+velero_bucket_name                  = null # Set an explicit globally unique name to override account-derived naming.
+
+vpc_cidr = "10.0.0.0/16"
+
+availability_zones = [
+  "ap-south-1a",
+  "ap-south-1b",
+  "ap-south-1c"
+]
+
+public_subnet_cidrs = [
+  "10.0.0.0/20",
+  "10.0.16.0/20",
+  "10.0.32.0/20"
+]
+
+private_subnet_cidrs = [
+  "10.0.48.0/20",
+  "10.0.64.0/20",
+  "10.0.80.0/20"
+]
+
+single_nat_gateway = true
+
+cluster_version     = "1.33"
+node_instance_types = ["t3.small"]
+node_min_size       = 2
+node_max_size       = 6
+node_desired_size   = 4
+node_disk_size      = 20
