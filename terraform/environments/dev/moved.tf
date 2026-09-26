@@ -14,3 +14,10 @@ moved {
   from = module.eks.helm_release.kube_prometheus_stack
   to   = helm_release.kube_prometheus_stack
 }
+
+# The provider became count-managed so QA/prod roots can reuse the single
+# account-wide GitHub OIDC provider created by dev.
+moved {
+  from = module.container_registry.aws_iam_openid_connect_provider.github
+  to   = module.container_registry.aws_iam_openid_connect_provider.github[0]
+}

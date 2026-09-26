@@ -2,7 +2,7 @@ data "aws_partition" "current" {}
 data "aws_caller_identity" "current" {}
 
 locals {
-  velero_bucket_name = "${var.project_name}-${var.environment}-velero-${data.aws_caller_identity.current.account_id}"
+  velero_bucket_name = var.velero_bucket_name != null && trimspace(var.velero_bucket_name) != "" ? var.velero_bucket_name : "${var.project_name}-${var.environment}-velero-${data.aws_caller_identity.current.account_id}"
 }
 
 resource "aws_s3_bucket" "velero" {

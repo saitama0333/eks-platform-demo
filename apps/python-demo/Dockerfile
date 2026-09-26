@@ -7,8 +7,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt \
-    && groupadd --system app \
-    && useradd --system --gid app --home-dir /app app
+  && groupadd --system --gid 10001 app \
+  && useradd --system --uid 10001 --gid 10001 --home-dir /app app
 
 COPY main.py test_main.py ./
 RUN chown -R app:app /app

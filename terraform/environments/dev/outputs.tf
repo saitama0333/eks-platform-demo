@@ -9,6 +9,11 @@ output "sample_app_ecr_repositories" {
 }
 
 output "github_actions_ecr_role_arn" {
-  description = "IAM role ARN to configure as GitHub Actions variable AWS_ROLE_ARN"
+  description = "IAM role ARN to configure as GitHub Actions variable AWS_ROLE_ARN_DEV"
   value       = module.container_registry.github_actions_role_arn
+}
+
+output "github_oidc_provider_arn" {
+  description = "Account-wide GitHub Actions OIDC provider ARN for other environment roots"
+  value       = module.container_registry.github_oidc_provider_arn
 }

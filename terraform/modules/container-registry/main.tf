@@ -2,6 +2,8 @@ locals {
   repository_names = {
     for app_name in var.application_names : app_name => "${var.project_name}/${var.environment}/${app_name}"
   }
+
+  github_oidc_provider_arn = var.create_github_oidc_provider ? aws_iam_openid_connect_provider.github[0].arn : var.github_oidc_provider_arn
 }
 
 resource "aws_ecr_repository" "apps" {
@@ -42,6 +44,7 @@ resource "aws_ecr_lifecycle_policy" "apps" {
 # GitHub Actions assumes this role through OIDC; no long-lived AWS keys are
 # stored in GitHub. Create one OIDC provider per AWS account.
 resource "aws_iam_openid_connect_provider" "github" {
+  count          = var.create_github_oidc_provider ? 1 : 0
   url            = "https://token.actions.githubusercontent.com"
   client_id_list = ["sts.amazonaws.com"]
   tags           = var.tags
@@ -54,7 +57,7 @@ data "aws_iam_policy_document" "github_actions_assume_role" {
 
     principals {
       type        = "Federated"
-      identifiers = [aws_iam_openid_connect_provider.github.arn]
+      identifiers = [local.github_oidc_provider_arn]
     }
 
     condition {

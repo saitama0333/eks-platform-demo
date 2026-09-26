@@ -18,6 +18,12 @@ variable "cluster_name" {
   type        = string
 }
 
+variable "velero_bucket_name" {
+  description = "Optional explicit globally unique Velero S3 bucket name; when null, derive it from project, environment, and the current AWS account"
+  type        = string
+  default     = null
+}
+
 variable "tags" {
   description = "Tags applied to AWS resources"
   type        = map(string)

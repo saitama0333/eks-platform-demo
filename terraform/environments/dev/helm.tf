@@ -126,3 +126,72 @@ resource "helm_release" "karpenter" {
 
   depends_on = [module.karpenter]
 }
+
+# The bucket name comes from the platform_aws module's aws_caller_identity
+# data source. Terraform owns this release so it can pass that computed value
+# directly to Velero's BackupStorageLocation configuration.
+resource "helm_release" "velero" {
+  name       = "velero"
+  repository = "https://vmware-tanzu.github.io/helm-charts"
+  chart      = "velero"
+  version    = "8.6.0"
+  namespace  = "velero"
+
+  create_namespace = true
+  wait             = true
+  timeout          = 600
+
+  values = [
+    yamlencode({
+      serviceAccount = {
+        server = {
+          create = true
+          name   = "velero"
+        }
+      }
+      credentials = {
+        useSecret = false
+      }
+      configuration = {
+        backupStorageLocation = [
+          {
+            name     = "default"
+            provider = "aws"
+            bucket   = module.platform_aws.velero_bucket_name
+            config = {
+              region = var.aws_region
+            }
+          }
+        ]
+        volumeSnapshotLocation = []
+        uploaderType           = "kopia"
+      }
+      snapshotsEnabled = false
+      deployNodeAgent  = true
+      initContainers = [
+        {
+          name            = "velero-plugin-for-aws"
+          image           = "velero/velero-plugin-for-aws:v1.10.0"
+          imagePullPolicy = "IfNotPresent"
+          volumeMounts = [
+            {
+              mountPath = "/target"
+              name      = "plugins"
+            }
+          ]
+        }
+      ]
+      schedules = {
+        daily = {
+          schedule = "0 2 * * *"
+          template = {
+            ttl                = "168h"
+            includedNamespaces = ["default"]
+          }
+        }
+      }
+    })
+  ]
+
+  depends_on = [module.platform_aws]
+}

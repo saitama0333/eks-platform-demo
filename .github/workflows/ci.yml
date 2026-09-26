@@ -6,6 +6,22 @@ on:
     branches:
       - develop
   workflow_dispatch:
+    inputs:
+      app:
+        description: Application to build and promote
+        required: true
+        type: choice
+        options:
+          - python-demo
+          - java-demo
+          - nginx-demo
+      target_environment:
+        description: Environment to promote into
+        required: true
+        type: choice
+        options:
+          - dev
+          - qa
 
 permissions:
   contents: read
@@ -90,6 +106,10 @@ jobs:
             helm template "$app" "helm/apps/$app" \
               --set image.repository=example.invalid/demo \
               --set image.tag=ci-check >/dev/null
+            helm template "$app-qa" "helm/apps/$app" \
+              --values "helm/apps/$app/values-qa.yaml" \
+              --set image.repository=example.invalid/demo \
+              --set image.tag=ci-check >/dev/null
           done
 
   test:
@@ -156,8 +176,8 @@ jobs:
           exit-code: "1"
 
   publish:
-    name: Publish ${{ matrix.app }} image and create GitOps PR
-    if: github.event_name == 'push' && github.ref == 'refs/heads/develop' && needs.changes.outputs.applications == 'true'
+    name: Manual ${{ inputs.target_environment }} promotion for ${{ matrix.app }}
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/develop' && inputs.app == matrix.app
     needs: [changes, test, helm-lint]
     runs-on: ubuntu-latest
     strategy:
@@ -170,18 +190,27 @@ jobs:
       id-token: write
     env:
       APP_NAME: ${{ matrix.app }}
+      TARGET_ENV: ${{ inputs.target_environment }}
       AWS_REGION: ap-south-1
-      ECR_REPOSITORY: eks-platform-demo/dev/${{ matrix.app }}
+      ECR_REPOSITORY: eks-platform-demo/${{ inputs.target_environment }}/${{ matrix.app }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Configure AWS credentials using GitHub OIDC
+      - name: Configure dev AWS credentials using GitHub OIDC
+        if: inputs.target_environment == 'dev'
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-to-assume: ${{ vars.AWS_ROLE_ARN_DEV }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Configure QA AWS credentials using GitHub OIDC
+        if: inputs.target_environment == 'qa'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN_QA }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Log in to Amazon ECR
@@ -221,7 +250,9 @@ jobs:
           from pathlib import Path
 
           app_name = os.environ["APP_NAME"]
-          manifest = Path(f"helm/apps/{app_name}/values.yaml")
+          environment = os.environ["TARGET_ENV"]
+          values_file = "values.yaml" if environment == "dev" else "values-qa.yaml"
+          manifest = Path(f"helm/apps/{app_name}/{values_file}")
           content = manifest.read_text()
           repository, tag = os.environ["IMAGE_URI"].rsplit(":", 1)
           updated, repository_replacements = re.subn(
@@ -235,8 +266,13 @@ jobs:
           manifest.write_text(updated)
           PY
 
-          if ! git diff --quiet -- "helm/apps/$APP_NAME/values.yaml"; then
-            branch="deploy/$APP_NAME-${GITHUB_SHA::7}"
+          values_file="helm/apps/$APP_NAME/values.yaml"
+          if [ "$TARGET_ENV" = "qa" ]; then
+            values_file="helm/apps/$APP_NAME/values-qa.yaml"
+          fi
+
+          if ! git diff --quiet -- "$values_file"; then
+            branch="promote/$TARGET_ENV/$APP_NAME-${GITHUB_SHA::7}"
             existing_pr=$(gh pr list --head "$branch" --state open --json url --jq '.[0].url // empty')
             if [ -n "$existing_pr" ]; then
               echo "Promotion PR already exists: $existing_pr"
@@ -244,13 +280,13 @@ jobs:
             fi
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add "helm/apps/$APP_NAME/values.yaml"
+            git add "$values_file"
             git checkout -b "$branch"
             git commit -m "chore(gitops): deploy $APP_NAME ${GITHUB_SHA::7}"
             git push --set-upstream origin "$branch"
             gh pr create \
               --base develop \
               --head "$branch" \
-              --title "Deploy $APP_NAME ${GITHUB_SHA::7}" \
-              --body "Promote the tested $APP_NAME image ${IMAGE_URI}. Merge to let Argo CD deploy it."
+              --title "Promote $APP_NAME to $TARGET_ENV (${GITHUB_SHA::7})" \
+              --body "Promote the tested $APP_NAME image ${IMAGE_URI} to $TARGET_ENV. Merge to let Argo CD deploy it."
           fi

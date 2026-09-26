@@ -1,0 +1,35 @@
+# QA uses a non-overlapping VPC CIDR from dev. Verify all connected networks
+# before changing or peering these ranges.
+cluster_endpoint_public_access_cidrs = ["REPLACE_WITH_YOUR_PUBLIC_IP/32"]
+velero_bucket_name                  = null # Set an explicit globally unique name to override account-derived naming.
+
+github_oidc_provider_arn = "REPLACE_WITH_DEV_GITHUB_OIDC_PROVIDER_ARN"
+
+vpc_cidr = "10.1.0.0/16"
+
+availability_zones = [
+  "ap-south-1a",
+  "ap-south-1b",
+  "ap-south-1c"
+]
+
+public_subnet_cidrs = [
+  "10.1.0.0/20",
+  "10.1.16.0/20",
+  "10.1.32.0/20"
+]
+
+private_subnet_cidrs = [
+  "10.1.48.0/20",
+  "10.1.64.0/20",
+  "10.1.80.0/20"
+]
+
+single_nat_gateway = true
+
+cluster_version     = "1.33"
+node_instance_types = ["t3.small"]
+node_min_size       = 2
+node_max_size       = 4
+node_desired_size   = 2
+node_disk_size      = 20

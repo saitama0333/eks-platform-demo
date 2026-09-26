@@ -1,4 +1,6 @@
 import os
+from pathlib import Path
+
 from flask import Flask, jsonify
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
@@ -31,6 +33,20 @@ def healthz():
 @app.get("/readyz")
 def readyz():
     return jsonify(status="ready")
+
+
+@app.get("/persistent")
+def persistent():
+    """Increment a per-pod counter stored on its EBS-backed claim."""
+    data_file = Path(os.getenv("PERSISTENCE_FILE", "/tmp/python-demo-count"))
+    data_file.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        count = int(data_file.read_text())
+    except FileNotFoundError:
+        count = 0
+    count += 1
+    data_file.write_text(str(count))
+    return jsonify(pod=os.getenv("HOSTNAME", "local"), persistent_request_count=count)
 
 
 @app.get("/")

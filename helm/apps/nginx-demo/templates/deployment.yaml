@@ -19,8 +19,10 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 101
+        runAsGroup: 101
         seccompProfile:
           type: RuntimeDefault
+      automountServiceAccountToken: false
       containers:
         - name: {{ include "nginx-demo.name" . }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
