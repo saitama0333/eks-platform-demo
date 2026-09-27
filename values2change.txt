@@ -1,0 +1,105 @@
+EKS PLATFORM DEMO - FILES TO PREPARE OR CHANGE
+================================================
+
+This is a deployment checklist. Do not commit generated terraform.tfvars files;
+.terraform and *.tfvars are ignored by Git.
+
+1. TERRAFORM INPUTS - REQUIRED
+
+DEV
+  Create: terraform/environments/dev/terraform.tfvars
+  Source: terraform/environments/dev/terraform.tfvars.example
+  Set:    cluster_endpoint_public_access_cidrs to your trusted public IP /32.
+  Review: VPC CIDRs, AZs, node sizing, and velero_bucket_name.
+
+QA (after dev has been applied)
+  Create: terraform/environments/qa/terraform.tfvars
+  Source: terraform/environments/qa/terraform.tfvars.example
+  Set:    cluster_endpoint_public_access_cidrs to your trusted public IP /32.
+  Set:    github_oidc_provider_arn to dev's github_oidc_provider_arn output.
+  Review: VPC CIDRs, AZs, node sizing, and velero_bucket_name.
+
+STATE BACKEND - RESOLVE BEFORE terraform init
+  Current files:
+    terraform/environments/dev/backend.tf
+    terraform/environments/qa/backend.tf
+  Both currently name bucket tf-gitops-nikhil in eu-central-1, with different
+  state keys. Their backend.config.hcl files contain comments only and do not
+  override backend.tf. terraform/bootstrap creates a differently named bucket.
+  Choose one bucket and make the dev/QA backend.tf settings consistent before
+  initializing.
+  If retaining the current bucket, confirm it exists and is the intended state
+  bucket; skip bootstrap. If using the bootstrap bucket, update both backend.tf
+  files to its output name and region before initializing either environment.
+  Do not change backend for an environment that already has state without
+  planning a state migration.
+
+2. ADD-ON VALUES - REVIEW BEFORE ARGO CD SYNC
+
+DEV
+  platform/addons/dev/prometheus/values.yaml
+    Prometheus, Grafana, and Alertmanager settings are together here; Grafana
+    is enabled by kube-prometheus-stack, not a separate Helm release.
+  platform/addons/dev/opentelemetry-collector/values.yaml
+  platform/addons/dev/tempo/values.yaml
+  platform/addons/dev/velero/values.yaml
+    Replace the bucket placeholder with dev's velero_backup_bucket output.
+  platform/addons/dev/aws-load-balancer-controller/values.yaml
+  platform/addons/dev/karpenter/values.yaml
+    Review cluster name, region, and interruption queue if Terraform naming or
+    region defaults are changed.
+
+QA
+  platform/addons/qa/prometheus/values.yaml
+  platform/addons/qa/opentelemetry-collector/values.yaml
+  platform/addons/qa/tempo/values.yaml
+  platform/addons/qa/velero/values.yaml
+    Replace the bucket placeholder with QA's velero_backup_bucket output.
+  platform/addons/qa/aws-load-balancer-controller/values.yaml
+  platform/addons/qa/karpenter/values.yaml
+    Review cluster name, region, and interruption queue if Terraform naming or
+    region defaults are changed.
+
+KARPENTER NODE CONFIGURATION (REVIEW FOR BOTH CLUSTERS)
+  platform/karpenter/dev/ec2nodeclass.yaml
+  platform/karpenter/dev/nodepool-on-demand.yaml
+  platform/karpenter/dev/nodepool-spot.yaml
+  platform/karpenter/qa/ec2nodeclass.yaml
+  platform/karpenter/qa/nodepool-on-demand.yaml
+  platform/karpenter/qa/nodepool-spot.yaml
+    Confirm node role names, discovery tags, instance constraints, and CPU
+    limits match the environment before Argo CD sync.
+
+3. SAMPLE APP IMAGE VALUES - UPDATED BY IMAGE PROMOTION
+
+  Dev values:
+    helm/apps/python-demo/values.yaml
+    helm/apps/java-demo/values.yaml
+    helm/apps/nginx-demo/values.yaml
+  QA values:
+    helm/apps/python-demo/values-qa.yaml
+    helm/apps/java-demo/values-qa.yaml
+    helm/apps/nginx-demo/values-qa.yaml
+
+Run the GitHub Actions image-promotion workflow after Terraform creates ECR and
+its publishing role. Select each app and the target environment, then merge the
+resulting PR. The workflow updates these files with the ECR repository and image
+tag. Do not deploy the workload Applications while REPLACE_WITH_* placeholders
+remain.
+
+4. GITOPS SOURCE - ONLY IF FORKING OR CHANGING BRANCH
+
+  platform/argocd/root.yaml
+  platform/argocd/qa-root.yaml
+  platform/addons/**/application.yaml
+  platform/apps/**/application.yaml
+
+These manifests currently use repository saitama0333/eks-platform-demo and
+branch develop. The changes must be pushed to that branch (or the manifests
+updated to your chosen repo/branch) before Argo CD can fetch them.
+
+5. NOT STORED IN THIS REPOSITORY
+
+  Create the External Secrets demo secret in AWS Secrets Manager for the target
+environment. Keep secret values out of Git; no manifest with secret values
+needs to be added or edited.

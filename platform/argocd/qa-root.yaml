@@ -8,9 +8,10 @@ spec:
   source:
     repoURL: https://github.com/saitama0333/eks-platform-demo.git
     targetRevision: develop
-    path: platform/argocd/qa-apps
+    path: platform
     directory:
-      recurse: false
+      recurse: true
+      include: '{addons/qa/**/application.yaml,apps/qa/**/application.yaml}'
   destination:
     server: https://kubernetes.default.svc
     namespace: argocd
@@ -20,3 +21,4 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+

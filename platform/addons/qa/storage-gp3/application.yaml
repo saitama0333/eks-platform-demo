@@ -1,24 +1,23 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: platform-addons
+  name: storage-gp3
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
 spec:
   project: default
   source:
     repoURL: https://github.com/saitama0333/eks-platform-demo.git
     targetRevision: develop
-    path: platform
+    path: platform/storage
     directory:
-      recurse: true
-      include: '{addons/dev/**/application.yaml,apps/dev/**/application.yaml}'
+      recurse: false
   destination:
     server: https://kubernetes.default.svc
-    namespace: argocd
+    namespace: default
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
-    syncOptions:
-      - CreateNamespace=true
 
