@@ -1,5 +1,3 @@
-# The provider became count-managed so either environment can own the single
-# account-wide GitHub OIDC provider and the other can reuse its ARN.
 moved {
   from = module.container_registry.aws_ecr_repository.apps
   to   = module.ecr.aws_ecr_repository.apps

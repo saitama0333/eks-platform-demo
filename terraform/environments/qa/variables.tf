@@ -23,14 +23,27 @@ variable "github_repository" {
 }
 
 variable "github_oidc_provider_arn" {
-  description = "GitHub OIDC provider ARN output from the dev root; the provider is account-wide and must not be created twice"
+  description = "Existing account-wide GitHub OIDC provider ARN when another environment created it"
   type        = string
+  default     = null
+}
+
+variable "create_github_oidc_provider" {
+  description = "Create the account-wide GitHub OIDC provider from QA when no other environment has created it"
+  type        = bool
+  default     = true
 }
 
 variable "velero_bucket_name" {
-  description = "Optional explicit globally unique Velero S3 bucket name; leave null to derive it from the active AWS account"
+  description = "Existing S3 bucket shared with Terraform state"
   type        = string
-  default     = null
+  default     = "tf-gitops-nikhil"
+}
+
+variable "velero_prefix" {
+  description = "QA-specific object prefix inside the shared S3 bucket"
+  type        = string
+  default     = "backup/qa"
 }
 
 variable "cluster_endpoint_public_access_cidrs" {

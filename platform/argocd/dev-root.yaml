@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: platform-addons
+  name: dev-platform-addons
   namespace: argocd
 spec:
   project: default
@@ -21,4 +21,3 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
-

@@ -1,53 +1,12 @@
 data "aws_partition" "current" {}
 data "aws_caller_identity" "current" {}
 
+data "aws_s3_bucket" "velero" {
+  bucket = var.velero_bucket_name
+}
+
 locals {
-  velero_bucket_name = var.velero_bucket_name != null && trimspace(var.velero_bucket_name) != "" ? var.velero_bucket_name : "${var.project_name}-${var.environment}-velero-${data.aws_caller_identity.current.account_id}"
-}
-
-resource "aws_s3_bucket" "velero" {
-  bucket = local.velero_bucket_name
-
-  lifecycle {
-    prevent_destroy = true
-  }
-
-  tags = merge(var.tags, { Name = local.velero_bucket_name })
-}
-
-resource "aws_s3_bucket_versioning" "velero" {
-  bucket = aws_s3_bucket.velero.id
-
-  versioning_configuration {
-    status = "Enabled"
-  }
-}
-
-resource "aws_s3_bucket_server_side_encryption_configuration" "velero" {
-  bucket = aws_s3_bucket.velero.id
-
-  rule {
-    apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
-    }
-  }
-}
-
-resource "aws_s3_bucket_public_access_block" "velero" {
-  bucket = aws_s3_bucket.velero.id
-
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
-}
-
-resource "aws_s3_bucket_ownership_controls" "velero" {
-  bucket = aws_s3_bucket.velero.id
-
-  rule {
-    object_ownership = "BucketOwnerEnforced"
-  }
+  velero_prefix = trim(var.velero_prefix, "/")
 }
 
 data "aws_iam_policy_document" "pod_identity_assume_role" {
@@ -71,9 +30,20 @@ resource "aws_iam_role" "velero" {
 
 data "aws_iam_policy_document" "velero" {
   statement {
-    sid       = "BucketMetadataAndListing"
-    actions   = ["s3:GetBucketLocation", "s3:ListBucket", "s3:ListBucketMultipartUploads"]
-    resources = [aws_s3_bucket.velero.arn]
+    sid       = "BucketLocation"
+    actions   = ["s3:GetBucketLocation"]
+    resources = [data.aws_s3_bucket.velero.arn]
+  }
+
+  statement {
+    sid       = "ListBackupPrefix"
+    actions   = ["s3:ListBucket", "s3:ListBucketMultipartUploads"]
+    resources = [data.aws_s3_bucket.velero.arn]
+    condition {
+      test     = "StringLike"
+      variable = "s3:prefix"
+      values   = [local.velero_prefix, "${local.velero_prefix}/*"]
+    }
   }
 
   statement {
@@ -85,7 +55,7 @@ data "aws_iam_policy_document" "velero" {
       "s3:ListMultipartUploadParts",
       "s3:PutObject"
     ]
-    resources = ["${aws_s3_bucket.velero.arn}/*"]
+    resources = ["${data.aws_s3_bucket.velero.arn}/${local.velero_prefix}/*"]
   }
 }
 

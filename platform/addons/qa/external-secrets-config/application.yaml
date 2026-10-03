@@ -10,7 +10,7 @@ spec:
   source:
     repoURL: https://github.com/saitama0333/eks-platform-demo.git
     targetRevision: develop
-    path: platform/secrets-qa
+    path: platform/secrets/qa
     directory:
       recurse: true
   destination:

@@ -19,9 +19,18 @@ variable "cluster_name" {
 }
 
 variable "velero_bucket_name" {
-  description = "Optional explicit globally unique Velero S3 bucket name; when null, derive it from project, environment, and the current AWS account"
+  description = "Existing S3 bucket for Velero backups (shared with the Terraform state bucket)"
   type        = string
-  default     = null
+}
+
+variable "velero_prefix" {
+  description = "Environment-specific object prefix inside the Velero S3 bucket"
+  type        = string
+
+  validation {
+    condition     = trim(var.velero_prefix, "/") != ""
+    error_message = "Set a non-empty Velero prefix to isolate environment backups."
+  }
 }
 
 variable "tags" {

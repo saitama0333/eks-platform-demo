@@ -8,9 +8,10 @@ configuration:
   backupStorageLocation:
     - name: default
       provider: aws
-      bucket: eks-platform-demo-dev-REPLACE_WITH_AWS_ACCOUNT_ID
+      bucket: tf-gitops-nikhil
+      prefix: backup/dev
       config:
-        region: ap-south-1
+        region: eu-central-1
   volumeSnapshotLocation: []
   uploaderType: kopia
 snapshotsEnabled: false

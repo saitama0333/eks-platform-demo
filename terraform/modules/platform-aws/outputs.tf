@@ -1,6 +1,11 @@
 output "velero_bucket_name" {
-  description = "Private, versioned S3 bucket used for Velero backups"
-  value       = aws_s3_bucket.velero.bucket
+  description = "Existing S3 bucket used for Velero backups"
+  value       = data.aws_s3_bucket.velero.bucket
+}
+
+output "velero_prefix" {
+  description = "Environment-specific S3 object prefix used for Velero backups"
+  value       = local.velero_prefix
 }
 
 output "velero_role_arn" {

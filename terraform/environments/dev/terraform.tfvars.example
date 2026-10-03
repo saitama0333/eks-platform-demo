@@ -1,7 +1,12 @@
 # Copy to terraform.tfvars and replace the public API CIDR with your current
 # workstation/VPN public egress IP in CIDR notation (usually x.x.x.x/32).
 cluster_endpoint_public_access_cidrs = ["REPLACE_WITH_YOUR_PUBLIC_IP/32"]
-velero_bucket_name                  = null # Set an explicit globally unique name to override account-derived naming.
+velero_bucket_name                   = "tf-gitops-nikhil"
+velero_prefix                        = "backup/dev"
+# Keep true only if dev is the first environment to create the account provider.
+# If QA creates it first, set false and copy QA's github_oidc_provider_arn output.
+create_github_oidc_provider = true
+github_oidc_provider_arn    = null
 
 vpc_cidr = "10.0.0.0/16"
 

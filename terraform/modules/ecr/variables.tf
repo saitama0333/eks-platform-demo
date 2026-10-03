@@ -31,7 +31,7 @@ variable "github_oidc_provider_arn" {
 }
 
 variable "application_names" {
-  description = "Sample application names for which ECR repositories are created"
+  description = "Sample applications for which ECR repositories are created"
   type        = set(string)
   default     = ["python-demo", "java-demo", "nginx-demo"]
 }

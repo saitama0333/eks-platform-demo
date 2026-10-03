@@ -100,7 +100,25 @@ variable "node_disk_size" {
 }
 
 variable "velero_bucket_name" {
-  description = "Optional explicit globally unique Velero S3 bucket name; leave null to derive it from the active AWS account"
+  description = "Existing S3 bucket shared with Terraform state"
+  type        = string
+  default     = "tf-gitops-nikhil"
+}
+
+variable "velero_prefix" {
+  description = "Dev-specific object prefix inside the shared S3 bucket"
+  type        = string
+  default     = "backup/dev"
+}
+
+variable "create_github_oidc_provider" {
+  description = "Create the account-wide GitHub OIDC provider from this environment; only one environment should set this true"
+  type        = bool
+  default     = true
+}
+
+variable "github_oidc_provider_arn" {
+  description = "Existing account-wide GitHub OIDC provider ARN when another environment created it"
   type        = string
   default     = null
 }
