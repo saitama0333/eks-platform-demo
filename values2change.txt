@@ -1,0 +1,275 @@
+EKS PLATFORM DEMO - DEV SETUP AND IMAGE CHECKLIST
+=================================================
+
+Use Git Bash from the repository root. This is a test setup: no domain,
+Ingress, public app endpoint, or public HTTPS certificate is needed. Argo CD
+deploys the add-ons and apps inside the cluster; access UIs with port-forward.
+
+1. CREATE THE DEV CLUSTER AND ECR REPOSITORIES
+-----------------------------------------------
+
+Prerequisites:
+  - AWS CLI, Terraform, kubectl, Helm, and Docker installed.
+  - AWS profile sandbox3 configured for the intended test account.
+  - Existing S3 bucket tf-gitops-nikhil in eu-central-1, accessible to your
+    AWS identity. Terraform state uses this bucket; Velero uses prefix
+    backup/dev.
+
+In Git Bash:
+
+  aws sso login --profile sandbox3
+  aws sts get-caller-identity --profile sandbox3
+  export AWS_PROFILE=sandbox3
+  aws s3api head-bucket --bucket tf-gitops-nikhil
+
+Confirm the account ID is the intended one. Do not continue if the bucket
+check fails.
+
+Prepare terraform/environments/dev/terraform.tfvars:
+  - If it does not exist, copy terraform.tfvars.example to terraform.tfvars.
+  - Set cluster_endpoint_public_access_cidrs to your trusted public IP(s),
+    each with /32.
+  - Keep create_github_oidc_provider = true and
+    github_oidc_provider_arn = null. Dev creates the account-wide OIDC provider.
+  - Review the VPC ranges and node sizes. Do not commit terraform.tfvars.
+
+Initialize, create, and review the plan:
+
+  cd terraform/environments/dev
+  terraform init
+  terraform plan -out=tfplan
+  terraform show tfplan
+  # Check account, region, resource sizes, and any destroy/replacement actions.
+  terraform apply tfplan
+
+Capture the publishing role for the optional GitHub Actions image workflow:
+
+  terraform output -raw github_actions_ecr_role_arn
+
+Add this output as the GitHub Actions repository variable AWS_ROLE_ARN_DEV.
+After this Terraform root, return to the repository root before running the
+Docker image commands below:
+
+  cd ../../..
+
+The apply creates the EKS cluster and three ECR repositories:
+  eks-platform-demo/dev/python-demo
+  eks-platform-demo/dev/java-demo
+  eks-platform-demo/dev/nginx-demo
+
+Terraform also creates the GitHub OIDC provider and an ECR-push IAM role.
+The QA environment must reuse the provider; do not create another one in the
+same AWS account.
+
+2. PUSH YOUR LOCAL APPLICATION IMAGES TO ECR
+--------------------------------------------
+
+Terraform has already created the app repositories. Repeat this section for
+each app image. Choose APP from python-demo, java-demo, nginx-demo. Use a new
+TAG every time: ECR tags are immutable in this setup.
+
+Set the following in Git Bash (example uses the Python app):
+
+  REGION=ap-south-1
+  ENVIRONMENT=dev
+  APP=python-demo
+  TAG="$(date -u +%Y%m%d%H%M%S)"
+  ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+  REGISTRY="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com"
+  REPOSITORY="eks-platform-demo/${ENVIRONMENT}/${APP}"
+  IMAGE="${REGISTRY}/${REPOSITORY}:${TAG}"
+
+Log Docker in to ECR:
+
+  aws ecr get-login-password --region "$REGION" |
+    docker login --username AWS --password-stdin "$REGISTRY"
+
+If building this repository's app locally:
+
+  docker build -f "apps/$APP/Dockerfile" -t "$IMAGE" "apps/$APP"
+  docker push "$IMAGE"
+
+If the image already exists locally under another name/tag:
+
+  docker tag LOCAL_IMAGE:LOCAL_TAG "$IMAGE"
+  docker push "$IMAGE"
+
+For an image hosted elsewhere, pull it first, then tag and push:
+
+  docker pull SOURCE_REGISTRY/IMAGE:SOURCE_TAG
+  docker tag SOURCE_REGISTRY/IMAGE:SOURCE_TAG "$IMAGE"
+  docker push "$IMAGE"
+
+Update the matching Helm values file in your branch and push the Git change:
+  Dev: helm/apps/<app>/values.yaml
+  QA:  helm/apps/<app>/values-qa.yaml
+
+Set image.repository to $REGISTRY/$REPOSITORY (no tag) and image.tag to $TAG.
+Commit and push the change to develop. Argo CD reads desired values from Git;
+pushing an image to ECR alone does not deploy it. The GitHub Actions promotion
+workflow can perform the build, ECR push, and values-file PR instead; use either
+that flow or the manual local flow above, not both for the same image tag.
+Run the image commands from the repository root; their Docker build contexts
+and Helm-values paths are relative to that directory.
+
+3. OPTIONAL: MIRROR THIRD-PARTY ADD-ON IMAGES TO ECR
+---------------------------------------------------
+
+Important: Terraform currently creates ECR repositories for the three demo
+apps only. It does not create add-on image repositories. By default, the
+add-on charts below download charts from public Helm repositories and their
+pods pull images from public container registries. If your nodes have outbound
+internet via the VPC NAT gateway, you can leave the add-on image values as-is.
+
+If you want to mirror add-on images into ECR as well:
+  1. Download/render the exact pinned chart version listed below with its
+     environment values file. List every image in the rendered manifests;
+     Prometheus stack has multiple component/subchart images.
+  2. Create an ECR repository for each source image (or add these repos to
+     Terraform). The app repositories above cannot be reused as arbitrary
+     add-on repositories.
+  3. Log in to ECR and push each exact source tag. Example for one image:
+
+       ADDON_REPOSITORY="eks-platform-demo/dev/addons/velero"
+       ADDON_TAG="SOURCE_TAG"
+       ADDON_IMAGE="${REGISTRY}/${ADDON_REPOSITORY}:${ADDON_TAG}"
+       aws ecr create-repository --region "$REGION" \
+         --repository-name "$ADDON_REPOSITORY"
+       docker pull SOURCE_REGISTRY/SOURCE_IMAGE:SOURCE_TAG
+       docker tag SOURCE_REGISTRY/SOURCE_IMAGE:SOURCE_TAG "$ADDON_IMAGE"
+       docker push "$ADDON_IMAGE"
+
+      Run create-repository once per image repository; if AWS reports that it
+      already exists, keep using it. Use a distinct ECR repository for each
+      source image where a chart needs multiple images. Use an unused tag: do
+      not overwrite a tag already in ECR.
+  4. Read that pinned chart's own values/defaults to find its image override
+     keys. Update every component's image registry/repository/tag in the
+     sibling platform/addons/dev/<addon>/values.yaml. There is no single
+     universal image key; kube-prometheus-stack includes multiple subcharts.
+  5. Render the chart again and verify every rendered image reference points
+     to your ECR registry before syncing Argo CD.
+
+From the repository root, download the public chart repositories used by dev:
+
+  mkdir -p "$HOME/eks-demo-charts"
+  helm repo add eks https://aws.github.io/eks-charts
+  helm repo add external-secrets https://charts.external-secrets.io
+  helm repo add metrics https://kubernetes-sigs.github.io/metrics-server/
+  helm repo add otel https://open-telemetry.github.io/opentelemetry-helm-charts
+  helm repo add prometheus https://prometheus-community.github.io/helm-charts
+  helm repo add grafana https://grafana.github.io/helm-charts
+  helm repo add velero https://vmware-tanzu.github.io/helm-charts
+  helm repo update
+
+Pull a chart using the exact version and chart name from its Application. For
+example:
+
+  helm pull eks/aws-load-balancer-controller --version 1.14.0 \
+    --untar --untardir "$HOME/eks-demo-charts"
+  helm pull oci://public.ecr.aws/karpenter/karpenter --version 1.6.2 \
+    --untar --untardir "$HOME/eks-demo-charts"
+
+Pull the remaining charts with these exact references and versions:
+
+  helm pull external-secrets/external-secrets --version 0.15.1 \
+    --untar --untardir "$HOME/eks-demo-charts"
+  helm pull metrics/metrics-server --version 3.12.2 \
+    --untar --untardir "$HOME/eks-demo-charts"
+  helm pull otel/opentelemetry-collector --version 0.113.0 \
+    --untar --untardir "$HOME/eks-demo-charts"
+  helm pull prometheus/kube-prometheus-stack --version 91.5.1 \
+    --untar --untardir "$HOME/eks-demo-charts"
+  helm pull grafana/tempo --version 1.23.0 \
+    --untar --untardir "$HOME/eks-demo-charts"
+  helm pull velero/velero --version 8.6.0 \
+    --untar --untardir "$HOME/eks-demo-charts"
+
+For each chart, inspect image defaults and render its manifests. Set CHART_DIR,
+RELEASE, NAMESPACE, and VALUES_FILE from that add-on's Application and values:
+
+  helm show values "$CHART_DIR" > "$HOME/chart-defaults.yaml"
+  grep -niE 'image|registry|repository|tag' "$HOME/chart-defaults.yaml"
+
+  helm template "$RELEASE" "$CHART_DIR" --namespace "$NAMESPACE" \
+    --values "$VALUES_FILE" > "$HOME/eks-demo-rendered.yaml"
+  grep -E '^[[:space:]]+image:' "$HOME/eks-demo-rendered.yaml" | sort -u
+
+Create/push every unique rendered source image, including sidecars and init
+containers, not just the main server. Use the exact image override keys from
+that chart's defaults before editing values.
+
+Pinned dev add-on charts and values to check:
+  aws-load-balancer-controller 1.14.0  platform/addons/dev/aws-load-balancer-controller/
+  external-secrets              0.15.1  platform/addons/dev/external-secrets/
+  karpenter                     1.6.2   platform/addons/dev/karpenter/
+  metrics-server                3.12.2  platform/addons/dev/metrics-server/
+  opentelemetry-collector       0.113.0 platform/addons/dev/opentelemetry-collector/
+  kube-prometheus-stack         91.5.1  platform/addons/dev/prometheus/
+  tempo                         1.23.0  platform/addons/dev/tempo/
+  velero                        8.6.0   platform/addons/dev/velero/
+
+The Velero AWS plugin is separately configured as an init-container image in
+platform/addons/dev/velero/values.yaml. OpenTelemetry's image repository is
+explicit in platform/addons/dev/opentelemetry-collector/values.yaml. For all
+other image override names and subchart images, use the exact pinned chart's
+values/defaults; do not guess. Mirroring images does not mirror the Helm
+charts themselves. Argo CD still needs chart-repository access unless you also
+mirror the charts and change each Application's repoURL/chart source.
+
+4. INSTALL ARGO CD ON DEV AND RUN ALL ADD-ONS
+--------------------------------------------
+
+First commit/push the repository changes to the GitHub repository and branch
+referenced by the Argo manifests (currently develop). For the normal public-
+registry setup, no image overrides are needed for the add-ons. Ensure all app
+Helm values have real image.repository and image.tag values before applying
+the root, or leave workload Applications out until their images are ready.
+From the repository root, check for remaining image placeholders with:
+
+  grep -R -n 'REPLACE_WITH' helm/apps
+
+Resolve every match for the environment you are about to sync.
+
+From the repository root, enter terraform/environments/dev, connect to the
+cluster, install Argo CD, and apply the dev root:
+
+  cd terraform/environments/dev
+  aws eks update-kubeconfig --region ap-south-1 \
+    --name eks-platform-demo-dev --alias dev
+  kubectl config use-context dev
+  helm repo add argo https://argoproj.github.io/argo-helm --force-update
+  helm repo update
+  helm upgrade --install argocd argo/argo-cd --version 10.9.2 \
+    --namespace argocd --create-namespace --wait --kube-context dev
+  kubectl --context dev apply -f ../../../platform/argocd/dev-root.yaml
+
+That single Argo root creates all dev Applications selected under
+platform/addons/dev/ and platform/apps/dev/. Argo CD fetches/syncs each pinned
+chart and applies the repository manifests; do not run helm install separately
+for every add-on. Check progress with:
+
+  kubectl --context dev -n argocd get applications
+  kubectl --context dev get pods -A
+
+The QA cluster is separate. Apply only platform/argocd/qa-root.yaml to its
+own kubectl context after QA Terraform and QA image values are ready.
+
+5. PLACEHOLDERS AND SECRET INPUT
+-------------------------------
+
+Before app sync, make sure these six files no longer contain
+REPLACE_WITH_* values:
+  helm/apps/python-demo/values.yaml and values-qa.yaml
+  helm/apps/java-demo/values.yaml and values-qa.yaml
+  helm/apps/nginx-demo/values.yaml and values-qa.yaml
+
+The app image files contain image.repository and image.tag. Add-on-specific
+repository/value changes belong in platform/addons/<environment>/<addon>/
+values.yaml. The external-secrets manifests refer to AWS Secrets Manager; if
+testing that integration, create eks-platform-demo/dev/demo-app with JSON
+fields username and password in AWS. Never commit secret values.
+
+Argo CD bootstrap files use symmetric names:
+  platform/argocd/dev-root.yaml
+  platform/argocd/qa-root.yaml

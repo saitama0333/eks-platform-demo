@@ -1,0 +1,27 @@
+replicaCount: 2
+
+image:
+  repository: REPLACE_WITH_ECR_REPOSITORY
+  tag: "REPLACE_WITH_IMAGE_TAG"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+containerPort: 8080
+
+observability:
+  enabled: true
+  endpoint: http://opentelemetry-collector.monitoring.svc.cluster.local:4317
+
+environment: dev
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 192Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi

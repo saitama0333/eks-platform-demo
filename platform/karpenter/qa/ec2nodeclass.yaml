@@ -3,15 +3,12 @@ kind: EC2NodeClass
 metadata:
   name: default
 spec:
-  role: KarpenterNodeRole-eks-platform-demo-dev
-
+  role: KarpenterNodeRole-eks-platform-demo-qa
   amiSelectorTerms:
     - alias: al2023@latest
-
   subnetSelectorTerms:
     - tags:
-        karpenter.sh/discovery: eks-platform-demo-dev
-
+        karpenter.sh/discovery: eks-platform-demo-qa
   securityGroupSelectorTerms:
     - tags:
-        karpenter.sh/discovery: eks-platform-demo-dev
+        karpenter.sh/discovery: eks-platform-demo-qa

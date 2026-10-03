@@ -1,0 +1,9 @@
+tempo:
+  reportingEnabled: false
+  receivers:
+    otlp:
+      protocols:
+        grpc: {}
+        http: {}
+persistence:
+  enabled: false

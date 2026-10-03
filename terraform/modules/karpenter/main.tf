@@ -57,7 +57,7 @@ resource "aws_sqs_queue" "karpenter_interruption" {
 resource "aws_cloudwatch_event_rule" "karpenter_interruption" {
   for_each = local.interruption_events
 
-  name = substr("${var.cluster_name}-karpenter-${each.key}", 0, 64)
+  name        = substr("${var.cluster_name}-karpenter-${each.key}", 0, 64)
   description = "Karpenter interruption event - ${each.key}"
 
   event_pattern = jsonencode({

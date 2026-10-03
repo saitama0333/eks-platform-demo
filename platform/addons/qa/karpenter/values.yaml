@@ -1,0 +1,10 @@
+serviceAccount:
+  create: true
+  name: karpenter
+settings:
+  clusterName: eks-platform-demo-qa
+  interruptionQueue: eks-platform-demo-qa-karpenter
+controller:
+  resources:
+    requests: {cpu: 200m, memory: 256Mi}
+    limits: {cpu: "1", memory: 1Gi}
