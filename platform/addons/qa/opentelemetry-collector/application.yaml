@@ -8,9 +8,9 @@ metadata:
 spec:
   project: default
   sources:
-    - repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
-      chart: opentelemetry-collector
-      targetRevision: "0.113.0"
+    - repoURL: https://github.com/saitama0333/eks-platform-demo.git
+      targetRevision: develop
+      path: artifacts/helm-charts/vendor/opentelemetry-collector
       helm:
         releaseName: opentelemetry-collector
         valueFiles:

@@ -70,9 +70,9 @@ Use port-forwarding for local UI/app access. No DNS, TLS certificate, domain, or
 ## Where images come from
 
 - **Python, Java, and NGINX apps:** Terraform creates one ECR repository per app per environment. GitHub Actions builds and pushes these images when you manually run the promotion workflow. It updates the app's Helm values through a PR.
-- **Velero, Prometheus/Grafana, Tempo, OpenTelemetry, and other add-ons:** these are Helm charts, not app images built by this repository. Their charts select the images and versions (the chart versions are pinned in the Argo CD Applications); Velero's AWS plugin image is explicitly configured. Nodes need outbound access to the charts' public Helm repositories and container registries. These add-on images are not copied into this project's ECR by Terraform.
+- **Platform add-ons:** pinned chart sources are vendored under `artifacts/helm-charts/vendor/` and read by Argo CD from this Git repository, rather than from public Helm chart repositories. Chart values are under `platform/addons/<environment>/<addon>/values.yaml`. The charts still reference container images; EKS nodes need access to those image registries unless you separately mirror the images to ECR. These add-on images are not copied into this project's ECR by Terraform.
 
-Dev application chart values are explicitly named `values-dev.yaml`; QA values are `values-qa.yaml`, and the environment's Argo CD Applications select the matching file. For exact Git Bash steps to push a local app image to ECR, download and optionally mirror pinned platform charts, and deploy the setup, see [values2change.txt](eks-platform-demo/values2change.txt). Applying the matching Argo CD root applies all add-on and app Applications. You do not need to install each add-on chart manually. The optional chart-mirror script is [mirror-addon-charts.sh](eks-platform-demo/scripts/mirror-addon-charts.sh); it mirrors Helm chart packages, not the container images inside them, and does not switch Argo CD away from its current public chart sources.
+Dev application chart values are explicitly named `values-dev.yaml`; QA values are `values-qa.yaml`, and the environment's Argo CD Applications select the matching file. For local image publishing, addon values paths, and Argo CD deployment steps, see [scripts/setup.md](scripts/setup.md) and the detailed [values2change.md](values2change.md) runbook. Applying the matching Argo CD root applies all add-on and app Applications; do not manually install charts that Argo CD manages. The [chart script](scripts/mirror-addon-charts.sh) downloads chart archives and extracts the vendored sources; push the extracted `vendor/` directories to Git for Argo CD.
 
 ## QA later
 
@@ -87,4 +87,5 @@ Secrets are organized by environment under `platform/secrets/dev/` and `platform
 - App charts and image values: `helm/apps/`
 - Argo CD roots: `platform/argocd/`
 - Cluster add-ons and values: `platform/addons/<environment>/`
+- Encrypted EBS gp3 StorageClass manifest: `platform/storage/gp3-encrypted.yaml` (created by the `storage-gp3` Argo Application; it is not a Helm chart)
 - External Secrets manifests: `platform/secrets/<environment>/`

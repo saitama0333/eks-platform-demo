@@ -8,9 +8,9 @@ metadata:
 spec:
   project: default
   sources:
-    - repoURL: https://aws.github.io/eks-charts
-      chart: aws-load-balancer-controller
-      targetRevision: "1.14.0"
+    - repoURL: https://github.com/saitama0333/eks-platform-demo.git
+      targetRevision: develop
+      path: artifacts/helm-charts/vendor/aws-load-balancer-controller
       helm:
         releaseName: aws-load-balancer-controller
         valueFiles:

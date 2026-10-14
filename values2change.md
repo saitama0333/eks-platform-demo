@@ -1,9 +1,10 @@
 EKS PLATFORM DEMO — DEV: FROM TERRAFORM APPLY TO RUNNING APPS
 =============================================================
 
-Recommended path after `terraform apply`: use GitHub Actions to build and push
-app images, so Docker Desktop is not required on your PC. Then bootstrap Argo CD
-once; the Argo root deploys all configured add-ons and app charts.
+If your personal laptop can reach the public image registries, build and push
+the demo app images locally with `apps/image.sh`. If an office network blocks
+Docker Hub, use the GitHub Actions workflow instead. Then bootstrap Argo CD
+once; the Argo root deploys all configured add-ons and apps.
 
 This test setup has no custom domain, Ingress, or public HTTPS endpoint. Apps
 and add-on services are internal. The EKS API is public but restricted to the
@@ -65,7 +66,7 @@ Terraform creates these repositories in Frankfurt:
 Choose ONE image-publishing method for each app. Do not reuse a previously
 pushed tag: ECR tags in these repositories are immutable.
 
-METHOD 1 (RECOMMENDED): GITHUB ACTIONS — LOCAL DOCKER NOT NEEDED
+METHOD 1: GITHUB ACTIONS — USE WHEN LOCAL REGISTRY ACCESS IS BLOCKED
 
 1. If you did not capture the output at the end of section A, get it now:
 
@@ -93,20 +94,28 @@ METHOD 1 (RECOMMENDED): GITHUB ACTIONS — LOCAL DOCKER NOT NEEDED
    If the command prints a dev values file, do not sync the dev root yet; merge
    the matching image promotion PR first.
 
-METHOD 2: BUILD/PUSH FROM THIS PC — DOCKER DESKTOP MUST BE RUNNING
+METHOD 2: BUILD/PUSH FROM THIS PC — REQUIRES REGISTRY ACCESS
 
-If `docker` is installed but `docker info` reports that it cannot connect, the
-Docker CLI is present but its engine is not running. Start Docker Desktop from
-the Windows Start menu, wait until it reports that Docker is running, then run
-`docker info` again. Terraform and Helm do not start Docker for you.
+This method requires Docker Desktop to be running and the laptop to reach every
+public base-image registry used by the Dockerfiles. A timeout to
+`registry-1.docker.io` means the build cannot fetch its base image; logging in
+to ECR does not fix access to Docker Hub. For a restricted office laptop, use
+Method 1 (GitHub Actions) instead. The workflow builds on a GitHub-hosted
+runner, pushes to ECR using GitHub OIDC, and opens a values-update PR.
 
 If your shell is still in terraform/environments/dev, return to the root first:
 
   cd ../../..
 
-Run these commands from the repository root in Git Bash. The example builds
-Python; change APP to java-demo or nginx-demo and use a new TAG for each push.
-Your active AWS identity also needs ECR push permissions in this account.
+Run these commands from the repository root in Git Bash only if Docker can pull
+the public base images. The example builds Python; change APP to java-demo or
+nginx-demo and use a new TAG for each push. Your active AWS identity also needs
+ECR push permissions in this account. The convenience script `apps/image.sh`
+builds and pushes all three apps, uses a unique tag, and prints their ECR URIs.
+From the repo root, run:
+
+  cd apps
+  bash image.sh
 
      REGION=eu-central-1
      APP=python-demo
@@ -122,7 +131,11 @@ Your active AWS identity also needs ECR push permissions in this account.
      docker build -f "apps/$APP/Dockerfile" -t "$IMAGE" "apps/$APP"
      docker push "$IMAGE"
 
-To push an image you already downloaded instead of building this repo's app:
+To push a Docker image archive that you actually have as a Docker image, first
+load it with `docker load -i <image-file.tar>`, then tag and push it. A Helm
+chart archive under `artifacts/helm-charts/` is not a Docker image and cannot
+be used this way. To push an already loaded source image instead of building
+this repo's app:
 
      docker pull SOURCE_REGISTRY/IMAGE:SOURCE_TAG
      docker tag SOURCE_REGISTRY/IMAGE:SOURCE_TAG "$IMAGE"
@@ -135,34 +148,67 @@ Do not include the tag in image.repository. Commit and push this values change
 on develop. An ECR push alone does not deploy the image; Argo reads the values
 from Git. Do not also run GitHub promotion for the same immutable tag.
 
-C. OPTIONAL: DOWNLOAD/MIRROR THE ADD-ON HELM CHARTS
+C. USE THE VENDORED ADD-ON HELM CHARTS
 ---------------------------------------------------
 
-The dev add-ons currently use their pinned public Helm chart sources and the
-images selected by those charts. With node outbound internet, you do not need
-to download or mirror charts/images to deploy the test setup.
+The pinned chart archives are stored under `artifacts/helm-charts/` and
+extracted into `artifacts/helm-charts/vendor/<chart-name>/`. Both the `.tgz`
+archives and extracted chart directories are tracked in Git. Every dev and QA
+chart Application points to that Git path, so Argo CD does not need public Helm
+chart repositories. EKS nodes may still need outbound access to public
+container image registries used by the charts.
 
-The script is optional. It downloads the pinned chart packages to the ignored
-local folder artifacts/helm-charts/; its `push` command uploads those CHART
-packages to ECR as OCI Helm charts. The script does not need Docker Desktop,
-does not push the chart's container images, and does not change Argo CD sources.
-Run from the repository root:
+To change addon configuration, edit the Helm values file referenced by that
+addon Application's `valueFiles`. These paths are for dev; QA has the matching
+files under `platform/addons/qa/`.
+
+| Addon | Chart | Values file |
+| --- | --- | --- |
+| AWS Load Balancer Controller | `aws-load-balancer-controller` | `platform/addons/dev/aws-load-balancer-controller/values.yaml` |
+| External Secrets | `external-secrets` | `platform/addons/dev/external-secrets/values.yaml` |
+| Karpenter | `karpenter` | `platform/addons/dev/karpenter/values.yaml` |
+| Metrics Server | `metrics-server` | `platform/addons/dev/metrics-server/values.yaml` |
+| OpenTelemetry Collector | `opentelemetry-collector` | `platform/addons/dev/opentelemetry-collector/values.yaml` |
+| Prometheus, Alertmanager, and Grafana | `kube-prometheus-stack` | `platform/addons/dev/prometheus/values.yaml` |
+| Tempo | `tempo` | `platform/addons/dev/tempo/values.yaml` |
+| Velero | `velero` | `platform/addons/dev/velero/values.yaml` |
+
+Grafana is enabled by the `kube-prometheus-stack` chart and configured in the
+Prometheus values file; there is no separate Grafana Application here. The
+chart and values wiring lives in each matching `application.yaml`. For example,
+`platform/addons/dev/prometheus/application.yaml` pins the chart version and
+references `platform/addons/dev/prometheus/values.yaml`.
+
+`storage-gp3` is not a chart. Its Argo Application applies
+`platform/storage/gp3-encrypted.yaml`, which creates the encrypted,
+non-default `gp3-encrypted` EBS StorageClass. A workload must request a PVC
+using this class to provision a volume.
+
+The script downloads pinned chart packages and extracts them into the vendored
+source directory. When all pinned archives already exist locally, `download`
+works without contacting public chart repositories. Run from the repository
+root:
 
      bash scripts/mirror-addon-charts.sh --help
      bash scripts/mirror-addon-charts.sh download
 
-Inspect the downloaded archives. Only if you deliberately want chart packages
-in ECR, and your AWS identity has permission to create/push ECR repositories:
+Commit the `.tgz` archives, extracted `artifacts/helm-charts/vendor/` chart
+directories, and Application changes so Argo CD can read them from Git. Do not
+run `push` just to deploy; it uploads OCI charts to ECR, but these Applications
+use the Git-vendored directories. The script does not push any chart container
+images.
+
+If you deliberately want to publish chart packages to ECR as a separate
+distribution mechanism, your AWS identity needs permission to create/push ECR
+repositories:
 
      bash scripts/mirror-addon-charts.sh push
 
-Do not run `push` just to install the platform. To make Argo CD consume ECR
-charts later, update each platform/addons/<environment>/<addon>/application.yaml
-to its printed OCI chart reference and configure Argo CD's ECR registry
-credentials. That is a separate change. Mirroring chart packages is also
-separate from mirroring container images; image mirroring requires pulling,
-retagging and pushing every image used by the chart (including subcharts,
-sidecars and init containers), then setting the chart-specific image overrides.
+To change the chart path or pinned chart contents, edit the corresponding
+`platform/addons/<environment>/<addon>/application.yaml` and vendored chart
+directory. Mirroring chart packages is separate from mirroring their images;
+image mirroring requires every image used by a chart (including subcharts,
+sidecars, and init containers), then chart-specific image overrides.
 
 D. INSTALL ARGO CD AND DEPLOY ALL DEV ADD-ONS/APPS
 --------------------------------------------------
@@ -171,6 +217,10 @@ First commit/push all repository changes to the GitHub repository and branch
 named in platform/argocd/dev-root.yaml and the child Applications. Make sure
 every app's values-dev.yaml has a real image repository/tag (Method 1's PRs
 must be merged, or Method 2's values edits committed).
+
+Also commit the extracted chart directories under
+`artifacts/helm-charts/vendor/`. Argo CD reads these paths from the Git branch;
+files that exist only on your laptop are not available to the cluster.
 
 From the repository root in Git Bash, connect to the Frankfurt dev cluster,
 install Argo CD once, then apply its root Application:
