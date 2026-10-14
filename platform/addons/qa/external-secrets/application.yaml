@@ -8,9 +8,9 @@ metadata:
 spec:
   project: default
   sources:
-    - repoURL: https://github.com/saitama0333/eks-platform-demo.git
-      targetRevision: develop
-      path: artifacts/helm-charts/vendor/external-secrets
+    - repoURL: https://charts.external-secrets.io
+      chart: external-secrets
+      targetRevision: "0.15.1"
       helm:
         releaseName: external-secrets
         valueFiles:

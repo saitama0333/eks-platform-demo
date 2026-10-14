@@ -8,9 +8,9 @@ metadata:
 spec:
   project: default
   sources:
-    - repoURL: https://github.com/saitama0333/eks-platform-demo.git
-      targetRevision: develop
-      path: artifacts/helm-charts/vendor/karpenter
+    - repoURL: public.ecr.aws/karpenter
+      chart: karpenter
+      targetRevision: "1.6.2"
       helm:
         releaseName: karpenter
         valueFiles:

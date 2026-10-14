@@ -8,9 +8,9 @@ metadata:
 spec:
   project: default
   sources:
-    - repoURL: https://github.com/saitama0333/eks-platform-demo.git
-      targetRevision: develop
-      path: artifacts/helm-charts/vendor/kube-prometheus-stack
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: kube-prometheus-stack
+      targetRevision: "91.5.1"
       helm:
         releaseName: kube-prometheus-stack
         valueFiles:

@@ -8,9 +8,9 @@ metadata:
 spec:
   project: default
   sources:
-    - repoURL: https://github.com/saitama0333/eks-platform-demo.git
-      targetRevision: develop
-      path: artifacts/helm-charts/vendor/velero
+    - repoURL: https://vmware-tanzu.github.io/helm-charts
+      chart: velero
+      targetRevision: "8.6.0"
       helm:
         releaseName: velero
         valueFiles:

@@ -8,9 +8,9 @@ metadata:
 spec:
   project: default
   sources:
-    - repoURL: https://github.com/saitama0333/eks-platform-demo.git
-      targetRevision: develop
-      path: artifacts/helm-charts/vendor/tempo
+    - repoURL: https://grafana.github.io/helm-charts
+      chart: tempo
+      targetRevision: "1.23.0"
       helm:
         releaseName: tempo
         valueFiles:
