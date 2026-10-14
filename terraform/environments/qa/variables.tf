@@ -1,7 +1,7 @@
 variable "aws_region" {
-  description = "AWS region"
+  description = "AWS region for QA resources (Frankfurt)"
   type        = string
-  default     = "ap-south-1"
+  default     = "eu-central-1"
 }
 
 variable "project_name" {
@@ -31,7 +31,7 @@ variable "github_oidc_provider_arn" {
 variable "create_github_oidc_provider" {
   description = "Create the account-wide GitHub OIDC provider from QA when no other environment has created it"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "velero_bucket_name" {

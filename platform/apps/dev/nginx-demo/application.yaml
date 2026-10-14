@@ -13,6 +13,8 @@ spec:
     path: helm/apps/nginx-demo
     helm:
       releaseName: nginx-demo
+      valueFiles:
+        - values-dev.yaml
   destination:
     server: https://kubernetes.default.svc
     namespace: default

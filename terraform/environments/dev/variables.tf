@@ -1,7 +1,7 @@
 variable "aws_region" {
-  description = "AWS region"
+  description = "AWS region for dev resources (Frankfurt)"
   type        = string
-  default     = "ap-south-1"
+  default     = "eu-central-1"
 }
 
 variable "project_name" {

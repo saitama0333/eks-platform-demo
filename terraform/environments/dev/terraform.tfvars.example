@@ -11,9 +11,9 @@ github_oidc_provider_arn    = null
 vpc_cidr = "10.0.0.0/16"
 
 availability_zones = [
-  "ap-south-1a",
-  "ap-south-1b",
-  "ap-south-1c"
+  "eu-central-1a",
+  "eu-central-1b",
+  "eu-central-1c"
 ]
 
 public_subnet_cidrs = [

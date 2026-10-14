@@ -96,14 +96,20 @@ jobs:
         with:
           version: v3.17.3
 
-      - name: Lint charts
-        run: helm lint helm/apps/python-demo helm/apps/java-demo helm/apps/nginx-demo
+      - name: Lint charts with environment values
+        shell: bash
+        run: |
+          for app in python-demo java-demo nginx-demo; do
+            helm lint "helm/apps/$app" --values "helm/apps/$app/values-dev.yaml"
+            helm lint "helm/apps/$app" --values "helm/apps/$app/values-qa.yaml"
+          done
 
       - name: Render charts
         shell: bash
         run: |
           for app in python-demo java-demo nginx-demo; do
             helm template "$app" "helm/apps/$app" \
+              --values "helm/apps/$app/values-dev.yaml" \
               --set image.repository=example.invalid/demo \
               --set image.tag=ci-check >/dev/null
             helm template "$app-qa" "helm/apps/$app" \
@@ -177,13 +183,13 @@ jobs:
 
   publish:
     name: Manual ${{ inputs.target_environment }} promotion for ${{ matrix.app }}
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/develop' && inputs.app == matrix.app
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/develop'
     needs: [changes, test, helm-lint]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        app: [python-demo, java-demo, nginx-demo]
+        app: ${{ fromJSON(format('["{0}"]', inputs.app)) }}
     permissions:
       contents: write
       pull-requests: write
@@ -191,7 +197,7 @@ jobs:
     env:
       APP_NAME: ${{ matrix.app }}
       TARGET_ENV: ${{ inputs.target_environment }}
-      AWS_REGION: ap-south-1
+      AWS_REGION: eu-central-1
       ECR_REPOSITORY: eks-platform-demo/${{ inputs.target_environment }}/${{ matrix.app }}
     steps:
       - name: Checkout
@@ -251,7 +257,7 @@ jobs:
 
           app_name = os.environ["APP_NAME"]
           environment = os.environ["TARGET_ENV"]
-          values_file = "values.yaml" if environment == "dev" else "values-qa.yaml"
+          values_file = "values-dev.yaml" if environment == "dev" else "values-qa.yaml"
           manifest = Path(f"helm/apps/{app_name}/{values_file}")
           content = manifest.read_text()
           repository, tag = os.environ["IMAGE_URI"].rsplit(":", 1)
@@ -266,7 +272,7 @@ jobs:
           manifest.write_text(updated)
           PY
 
-          values_file="helm/apps/$APP_NAME/values.yaml"
+          values_file="helm/apps/$APP_NAME/values-dev.yaml"
           if [ "$TARGET_ENV" = "qa" ]; then
             values_file="helm/apps/$APP_NAME/values-qa.yaml"
           fi

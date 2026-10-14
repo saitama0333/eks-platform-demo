@@ -15,6 +15,9 @@ override.tf.json
 *.tfplan
 tfplan
 
+# Locally downloaded / packaged Helm chart archives
+/artifacts/helm-charts/
+
 # Kubernetes
 *.secret.yaml
 *.secret.yml

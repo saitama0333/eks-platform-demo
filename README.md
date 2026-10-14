@@ -48,12 +48,12 @@ Use Git Bash from the repository directory. Before applying, confirm that the ex
 
    Add that value as the GitHub Actions repository variable `AWS_ROLE_ARN_DEV`. The workflow uses GitHub OIDC, so do not add AWS access keys. The same apply creates three dev ECR repositories: `eks-platform-demo/dev/python-demo`, `eks-platform-demo/dev/java-demo`, and `eks-platform-demo/dev/nginx-demo`.
 
-5. **Publish the app images before syncing workloads.** In GitHub Actions, run the applications workflow from branch `develop` once for each app, selecting target `dev`. It builds and pushes an immutable image to that app's dev ECR repository, then opens a PR to update its Helm values. Review and merge each PR. The files under `helm/apps/<app>/values.yaml` intentionally start with image placeholders; the workflow replaces them. Do not sync the app Applications until these PRs have been merged. Allow the repository's GitHub Actions token to create PRs.
+5. **Publish the app images before syncing workloads.** In GitHub Actions, run the applications workflow from branch `develop` once for each app, selecting target `dev`. It builds and pushes an immutable image to that app's dev ECR repository, then opens a PR to update `helm/apps/<app>/values-dev.yaml`. QA uses `values-qa.yaml`. Review and merge each PR. Both environment values files intentionally start with image placeholders. Do not sync the app Applications until the target environment's values contain a real ECR repository and image tag. Allow the repository's GitHub Actions token to create PRs.
 
-6. **Connect to the cluster and install Argo CD.** Terraform names the cluster `eks-platform-demo-dev` in `ap-south-1`. Still in Git Bash:
+6. **Connect to the cluster and install Argo CD.** Terraform names the cluster `eks-platform-demo-dev` in Frankfurt (`eu-central-1`). Still in Git Bash:
 
    ```bash
-   aws eks update-kubeconfig --region ap-south-1 --name eks-platform-demo-dev --alias dev
+   aws eks update-kubeconfig --region eu-central-1 --name eks-platform-demo-dev --alias dev
    kubectl config use-context dev
    helm repo add argo https://argoproj.github.io/argo-helm --force-update
    helm repo update
@@ -72,7 +72,7 @@ Use port-forwarding for local UI/app access. No DNS, TLS certificate, domain, or
 - **Python, Java, and NGINX apps:** Terraform creates one ECR repository per app per environment. GitHub Actions builds and pushes these images when you manually run the promotion workflow. It updates the app's Helm values through a PR.
 - **Velero, Prometheus/Grafana, Tempo, OpenTelemetry, and other add-ons:** these are Helm charts, not app images built by this repository. Their charts select the images and versions (the chart versions are pinned in the Argo CD Applications); Velero's AWS plugin image is explicitly configured. Nodes need outbound access to the charts' public Helm repositories and container registries. These add-on images are not copied into this project's ECR by Terraform.
 
-For exact Git Bash steps to push a local app image to ECR, optionally mirror add-on images, and deploy all add-ons, see [values2change.txt](eks-platform-demo/values2change.txt). Applying the matching Argo CD root deploys the add-ons; individual Helm installs are not needed.
+Dev application chart values are explicitly named `values-dev.yaml`; QA values are `values-qa.yaml`, and the environment's Argo CD Applications select the matching file. For exact Git Bash steps to push a local app image to ECR, download and optionally mirror pinned platform charts, and deploy the setup, see [values2change.txt](eks-platform-demo/values2change.txt). Applying the matching Argo CD root applies all add-on and app Applications. You do not need to install each add-on chart manually. The optional chart-mirror script is [mirror-addon-charts.sh](eks-platform-demo/scripts/mirror-addon-charts.sh); it mirrors Helm chart packages, not the container images inside them, and does not switch Argo CD away from its current public chart sources.
 
 ## QA later
 

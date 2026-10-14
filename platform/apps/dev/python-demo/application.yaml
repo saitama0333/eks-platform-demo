@@ -13,6 +13,8 @@ spec:
     path: helm/apps/python-demo
     helm:
       releaseName: python-demo
+      valueFiles:
+        - values-dev.yaml
   destination:
     server: https://kubernetes.default.svc
     namespace: default
