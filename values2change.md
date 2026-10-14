@@ -148,7 +148,7 @@ Do not include the tag in image.repository. Commit and push this values change
 on develop. An ECR push alone does not deploy the image; Argo reads the values
 from Git. Do not also run GitHub promotion for the same immutable tag.
 
-C. USE THE VENDORED ADD-ON HELM CHARTS
+C. CHARTS NOW, PRIVATE ECR TARGET
 ---------------------------------------------------
 
 The pinned chart archives are stored under `artifacts/helm-charts/` and
@@ -157,6 +157,12 @@ archives and extracted chart directories are tracked in Git. Every dev and QA
 chart Application points to that Git path, so Argo CD does not need public Helm
 chart repositories. EKS nodes may still need outbound access to public
 container image registries used by the charts.
+
+This Git-vendored source is the current working setup. The production target is
+to publish chart packages to private ECR OCI repositories and mirror every
+rendered addon image to ECR. That target is **not active yet**: the Application
+manifests still use Git paths, and there is not yet an addon image-mirror job,
+image override set, or renewable Argo CD ECR credential configuration.
 
 To change addon configuration, edit the Helm values file referenced by that
 addon Application's `valueFiles`. These paths are for dev; QA has the matching
@@ -193,10 +199,10 @@ root:
      bash scripts/mirror-addon-charts.sh download
 
 Commit the `.tgz` archives, extracted `artifacts/helm-charts/vendor/` chart
-directories, and Application changes so Argo CD can read them from Git. Do not
-run `push` just to deploy; it uploads OCI charts to ECR, but these Applications
-use the Git-vendored directories. The script does not push any chart container
-images.
+directories, and Application changes so Argo CD can read them from Git. The
+script's `push` command publishes chart packages to
+`ACCOUNT.dkr.ecr.eu-central-1.amazonaws.com/eks-platform-demo/addon-charts/<chart>`;
+it does not push chart container images or switch Application sources.
 
 If you deliberately want to publish chart packages to ECR as a separate
 distribution mechanism, your AWS identity needs permission to create/push ECR
@@ -204,11 +210,43 @@ repositories:
 
      bash scripts/mirror-addon-charts.sh push
 
-To change the chart path or pinned chart contents, edit the corresponding
-`platform/addons/<environment>/<addon>/application.yaml` and vendored chart
-directory. Mirroring chart packages is separate from mirroring their images;
-image mirroring requires every image used by a chart (including subcharts,
-sidecars, and init containers), then chart-specific image overrides.
+For the ECR chart migration, first create repositories with immutable tags,
+encryption, scanning, and retention policies. Publish the pinned archives with
+the script above. Then change each chart Application's chart source to its ECR
+OCI repository while retaining the Git values source. An Argo OCI source uses
+the registry hostname/path without the `oci://` prefix, plus the chart name and
+version. Configure renewable ECR authentication for Argo CD before switching;
+ECR login passwords expire, so a one-time local `helm registry login` is not
+enough. Do not remove the Git-vendored source until the ECR-based Application
+has synced successfully.
+
+The currently rendered addon image references to mirror are:
+
+  public.ecr.aws/eks/aws-load-balancer-controller:v2.14.0
+  oci.external-secrets.io/external-secrets/external-secrets:v0.15.1
+  public.ecr.aws/karpenter/controller:1.6.2@sha256:1378b7c2fdf1c63e7d7c91db93c68309efd6d4c0bc24ab946968bf858a88e24e
+  registry.k8s.io/metrics-server/metrics-server:v0.7.2
+  otel/opentelemetry-collector-contrib:0.117.0
+  docker.io/bitnami/kubectl:1.37
+  grafana/grafana:13.2.2-distroless
+  ghcr.io/jkroepke/kube-webhook-certgen:1.8.8
+  quay.io/kiwigrid/k8s-sidecar:2.11.2
+  quay.io/prometheus/alertmanager:v0.34.1
+  quay.io/prometheus/node-exporter:v1.12.1-distroless
+  quay.io/prometheus/prometheus:v3.14.0-distroless
+  quay.io/prometheus-operator/prometheus-operator:v0.94.1
+  registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.20.0
+  grafana/tempo:2.8.0
+  velero/velero:v1.15.2
+  velero/velero-plugin-for-aws:v1.10.0
+
+This inventory was rendered from the current dev/QA charts and values. Re-run
+the image inventory after changing any chart version or enabling chart
+features; optional exporters and sidecars can add images. Mirror multi-platform
+images without dropping architectures, scan them, record source/destination
+digests, and set every chart-specific image override in both environments.
+The ECR Terraform module currently creates only the three app repositories, not
+these addon chart/image repositories.
 
 D. INSTALL ARGO CD AND DEPLOY ALL DEV ADD-ONS/APPS
 --------------------------------------------------

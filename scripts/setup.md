@@ -39,9 +39,23 @@ Each child `application.yaml` selects a Helm chart/version and points to a value
 
 Grafana is enabled inside `kube-prometheus-stack`; it is not a separate chart in this setup. For QA, use the matching `platform/addons/qa/<addon>/values.yaml` and QA Application. App image values are separate: `helm/apps/<app>/values-dev.yaml` and `helm/apps/<app>/values-qa.yaml`.
 
-## Vendored charts and addon values
+## Current chart and image sources
 
-Argo CD reads the extracted, version-pinned chart sources from `artifacts/helm-charts/vendor/` in this Git repository. The pinned `.tgz` archives and extracted `vendor/` directories are both tracked; commit changes to them along with the Application changes. Each Application's `path` points to its chart directory, and its `valueFiles` points to the environment-specific file listed above. This avoids public Helm chart repositories during Argo sync. Chart images are separate: EKS nodes still need registry access for container images unless those images are mirrored to ECR too.
+Today, Argo CD reads extracted chart sources from `artifacts/helm-charts/vendor/` in this Git repository. The pinned `.tgz` archives and extracted `vendor/` directories are tracked. Each addon Application's `path` points to a chart directory and `valueFiles` selects the environment values shown above. This avoids public Helm chart repositories, but it does not move the charts into ECR. Addon workloads still use their upstream image registries by default.
+
+## Production ECR migration status
+
+The intended production model is to publish the approved chart archives to ECR as OCI charts and mirror every chart image into private ECR repositories. **That migration is not complete yet.** The chart script can publish chart packages, but the Argo Applications currently use Git paths; no addon image-mirror workflow or ECR image overrides are configured.
+
+Complete and validate these steps before describing the cluster as private-registry-only:
+
+1. Create ECR repositories for each pinned chart and each upstream container image. Keep immutable version/digest tags, scan on push, and apply retention policies.
+2. Publish the pinned `.tgz` charts with `bash scripts/mirror-addon-charts.sh push` from an AWS-authenticated machine. The default chart location is `ACCOUNT.dkr.ecr.eu-central-1.amazonaws.com/eks-platform-demo/addon-charts/<chart>`.
+3. Mirror all rendered images, preserving multi-platform manifests and recording source and destination digests. Add chart-specific ECR image overrides to each dev/QA values file.
+4. Configure Argo CD to read the OCI charts from ECR and authenticate using a renewable ECR token flow. ECR login passwords expire; do not commit a generated password or treat a one-time login as durable credentials.
+5. Test a clean Argo sync and node image pull, then remove the Git chart source only after the ECR source is healthy.
+
+The nodes already need ECR pull permission for app images. Confirm the node roles also have pull access to every addon-image repository, especially if repositories use different accounts.
 
 `storage-gp3` is not a chart. Its Application applies `platform/storage/gp3-encrypted.yaml`, which defines an encrypted, non-default EBS `gp3` StorageClass named `gp3-encrypted`. A workload must request a PVC using that class to provision a volume; simply installing the StorageClass does not create a disk.
 
