@@ -6,4 +6,8 @@ tempo:
         grpc: {}
         http: {}
 persistence:
-  enabled: false
+  enabled: true
+  storageClassName: gp3-encrypted
+  accessModes:
+    - ReadWriteOnce
+  size: 10Gi

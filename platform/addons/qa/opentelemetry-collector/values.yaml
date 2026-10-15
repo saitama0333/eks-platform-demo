@@ -11,6 +11,8 @@ ports:
   metrics: {enabled: true, containerPort: 8889, servicePort: 8889, protocol: TCP}
 serviceMonitor:
   enabled: true
+  extraLabels:
+    release: kube-prometheus-stack
 config:
   receivers:
     otlp:
