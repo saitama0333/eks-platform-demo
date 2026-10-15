@@ -1,6 +1,17 @@
 
 #!/usr/bin/env bash
-set -Eeuo pipefail
+set -euo pipefail
+
+if [[ "${1:-}" == "__run-forward" ]]; then
+  shift
+  service="$1"
+  shift
+  "$@" &
+  child_pid=$!
+  trap 'kill "$child_pid" 2>/dev/null || true; wait "$child_pid" 2>/dev/null || true; exit 143' TERM INT HUP
+  wait "$child_pid"
+  exit $?
+fi
 
 # Usage:
 #   bash scripts/port-forward.sh dev start
@@ -89,7 +100,19 @@ case "$ACTION" in
     ;;
 esac
 
-CONTEXT="${CONTEXTS[$ENVIRONMENT]}"
+command -v kubectl >/dev/null 2>&1 || {
+  echo "kubectl is required but was not found in PATH." >&2
+  exit 1
+}
+
+for utility in grep mkdir nohup ps rm sleep; do
+  command -v "$utility" >/dev/null 2>&1 || {
+    echo "Required command not found: ${utility}" >&2
+    exit 1
+  }
+done
+
+CONTEXT="$ENVIRONMENT"
 STATE_ROOT="${XDG_STATE_HOME:-${HOME:-.}/.local/state}"
 STATE_DIR="${STATE_ROOT}/eks-platform-demo/port-forward/${ENVIRONMENT}"
 
@@ -111,14 +134,37 @@ is_tracked_process() {
   local args
 
   [[ "$pid" =~ ^[0-9]+$ ]] || return 1
+  [[ "$pid" =~ ^[0-9]+$ ]] || return 1
   kill -0 "$pid" 2>/dev/null || return 1
+  args="$(ps -p "$pid" -f 2>/dev/null || true)"
+  [[ "$args" == *__run-forward*"${service}"* ]]
+}
 
-  args="$(ps -p "$pid" -o args= 2>/dev/null || true)"
+terminate_forward() {
+  local pid="$1"
+  local service="$2"
 
-  [[ "$args" == *"port-forward"* &&
-     "$args" == *"--context $CONTEXT"* &&
-     "$args" == *"-n $namespace"* &&
-     "$args" == *"service/$service"* ]]
+  if ! is_tracked_process "$pid" "$service"; then
+    return 0
+  fi
+  if ! kill "$pid" 2>/dev/null; then
+    if is_tracked_process "$pid" "$service"; then
+      echo "Could not stop port-forward process ${pid} for ${service}." >&2
+      return 1
+    fi
+    return 0
+  fi
+
+  for _ in {1..5}; do
+    is_tracked_process "$pid" "$service" || return 0
+    sleep 1
+  done
+
+  if is_tracked_process "$pid" "$service"; then
+    echo "Port-forward process ${pid} for ${service} did not stop." >&2
+    return 1
+  fi
+  return 0
 }
 
 # --------------------------------------------------
@@ -130,6 +176,7 @@ show_status() {
   local pid_file pid
 
   pid_file="$(pid_file_for "$namespace" "$service")"
+
 
   if [[ -f "$pid_file" ]]; then
     pid="$(<"$pid_file")"
@@ -144,6 +191,31 @@ show_status() {
   fi
 
   printf 'STOPPED  %-28s %s\n' "$label" "$url"
+}
+
+stop_forward() {
+  local namespace="$1"
+  local service="$2"
+  local label="$3"
+  local pid_file pid
+
+  pid_file="$(pid_file_for "$namespace" "$service")"
+  if [[ ! -f "$pid_file" ]]; then
+    return
+  fi
+
+  pid="$(<"$pid_file")"
+  if ! [[ "$pid" =~ ^[0-9]+$ ]]; then
+    printf 'Removed invalid PID file for %s\n' "$label"
+  elif is_tracked_process "$pid" "$service"; then
+    if ! terminate_forward "$pid" "$service"; then
+      return 1
+    fi
+    printf 'Stopped %-28s (PID %s)\n' "$label" "$pid"
+  else
+    printf 'Removed stale PID file for %s\n' "$label"
+  fi
+  rm -f "$pid_file"
 }
 
 if [[ "$ACTION" == "status" ]]; then
@@ -183,15 +255,10 @@ stop_forward() {
 
 if [[ "$ACTION" == "stop" ]]; then
   failed=0
-
   for entry in "${FORWARDS[@]}"; do
     IFS='|' read -r namespace service ports url label <<< "$entry"
-
-    if ! stop_forward "$namespace" "$service" "$label"; then
-      failed=1
-    fi
+    stop_forward "$namespace" "$service" "$label" || failed=1
   done
-
   exit "$failed"
 fi
 
@@ -253,11 +320,9 @@ for entry in "${FORWARDS[@]}"; do
   fi
 
   read -r -a port_args <<< "$ports"
-
-  # Start kubectl in the background, bound to localhost only.
-  nohup kubectl --context "$CONTEXT" -n "$namespace" \
-    port-forward --address 127.0.0.1 \
-    "service/$service" "${port_args[@]}" \
+  nohup bash "$0" __run-forward "$service" \
+    kubectl --context "$CONTEXT" -n "$namespace" \
+    port-forward --address 127.0.0.1 "service/${service}" "${port_args[@]}" \
     >"$log_file" 2>&1 </dev/null &
 
   pid=$!
@@ -282,10 +347,10 @@ for entry in "${FORWARDS[@]}"; do
   if [[ "$ready" -eq 1 ]] && is_tracked_process "$pid" "$namespace" "$service"; then
     printf 'Started    %-28s %s\n' "$label" "$url"
   else
-    printf 'Failed     %-28s see %s\n' "$label" "$log_file" >&2
-    if is_tracked_process "$pid" "$namespace" "$service"; then
-      kill "$pid" 2>/dev/null || true
+    if is_tracked_process "$pid" "$service"; then
+      terminate_forward "$pid" "$service" || failed=1
     fi
+    printf 'Failed   %-28s see %s\n' "$label" "$log_file" >&2
     rm -f "$pid_file"
     failed=1
   fi

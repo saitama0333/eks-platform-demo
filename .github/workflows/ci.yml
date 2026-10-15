@@ -91,6 +91,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Check Bash script syntax
+        run: |
+          for script in apps/image.sh scripts/*.sh; do
+            bash -n "$script"
+          done
+
       - name: Install Helm
         uses: azure/setup-helm@v4
         with:
@@ -171,8 +177,22 @@ jobs:
       - name: Build application image
         run: docker build --file "apps/$APP_NAME/Dockerfile" --tag "eks-platform-demo:$APP_NAME-test" "apps/$APP_NAME"
 
+      - name: Smoke test NGINX image
+        if: matrix.app == 'nginx-demo'
+        run: |
+          container_id=$(docker run --detach --publish 127.0.0.1:8080:8080 "eks-platform-demo:$APP_NAME-test")
+          trap 'docker rm --force "$container_id" >/dev/null' EXIT
+          for attempt in {1..10}; do
+            if curl --fail --silent http://127.0.0.1:8080/healthz | grep -qx 'ok'; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs "$container_id"
+          exit 1
+
       - name: Scan image for critical vulnerabilities
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: eks-platform-demo:${{ matrix.app }}-test
           format: table
