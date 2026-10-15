@@ -1,8 +1,8 @@
 replicaCount: 2
 
 image:
-  repository: REPLACE_WITH_ECR_REPOSITORY
-  tag: "REPLACE_WITH_IMAGE_TAG"
+  repository: 829647177071.dkr.ecr.eu-central-1.amazonaws.com/eks-platform-demo/dev/nginx-demo
+  tag: "20261015151757"
   pullPolicy: IfNotPresent
 
 service:
