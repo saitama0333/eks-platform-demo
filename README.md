@@ -210,6 +210,72 @@ The charts for add-ons are pinned in their `application.yaml` files. The
 Argo CD Helm chart version is pinned in the bootstrap command above. Keep
 credentials and SSO client secrets out of Git; use a secret manager for them.
 
+### Upgrade an existing Argo CD installation
+
+The current repository does not contain a `platform/dev-values.yaml` file.
+Argo CD itself is installed by the Helm release; `platform/argocd/dev-root.yaml`
+is the GitOps root Application, not Argo CD Helm values. The addon values live
+under `platform/addons/dev/<addon>/values.yaml`.
+
+Before upgrading, confirm that your AWS profile and kube context point to the
+demo dev cluster, not another cluster. Check the existing Helm release name and
+version. Keep a private backup of its user-supplied Helm values; do not commit
+the backup because it may contain credentials:
+
+```bash
+aws sso login --profile sandbox3
+export AWS_PROFILE=sandbox3
+aws sts get-caller-identity
+aws eks describe-cluster --region eu-central-1 \
+  --name eks-platform-demo-dev --query 'cluster.arn' --output text
+aws eks update-kubeconfig --region eu-central-1 \
+  --name eks-platform-demo-dev --alias dev
+CTX=dev
+kubectl --context "$CTX" get nodes
+helm list --kube-context "$CTX" --namespace argocd
+helm get values argocd --kube-context "$CTX" --namespace argocd \
+  --output yaml > "$HOME/argocd-values-backup.yaml"
+```
+
+Proceed only after confirming the cluster and release are correct. Review the
+current Argo CD release notes if the installed version is several major
+versions behind. Then upgrade the existing release while retaining its
+previous user-supplied values:
+
+```bash
+helm repo add argo https://argoproj.github.io/argo-helm --force-update
+helm repo update
+helm upgrade argocd argo/argo-cd --version 10.10.5 \
+  --namespace argocd --reuse-values --wait --timeout 10m \
+  --kube-context "$CTX"
+helm list --kube-context "$CTX" --namespace argocd
+kubectl --context "$CTX" get pods,deployments,statefulsets -n argocd
+kubectl --context "$CTX" rollout status deployment/argocd-server --timeout=10m
+kubectl --context "$CTX" rollout status statefulset/argocd-application-controller --timeout=10m
+```
+
+The pinned chart is `10.10.5` and packages Argo CD `v3.5.5`. `helm repo
+update` only refreshes the local chart index; the `helm upgrade` command is
+what changes the running Argo CD components. A chart upgrade updates its
+server, controller, repo-server, Redis, Dex, ApplicationSet, and notifications
+components according to the release values. It does not update the separate
+charts managed by child Applications.
+
+To apply the monitoring persistence and Collector scrape changes in this
+repository, first commit and push the intended dev values to `develop`. Argo
+CD should then sync the child Applications automatically. If the root is not
+yet installed, or needs to be re-applied, run:
+
+```bash
+kubectl --context "$CTX" apply -f platform/argocd/dev-root.yaml
+kubectl --context "$CTX" -n argocd get applications
+```
+
+Do not use `helm upgrade --install` with a guessed values file on an existing
+release; it may replace important configuration. `--reuse-values` retains
+the existing release overrides. It does not restore custom settings that
+were never stored in the Helm release.
+
 ## Access the web UIs and workloads
 
 Run each `port-forward` in its own Git Bash window and leave it running while
@@ -313,3 +379,137 @@ production-ready.
 - Add-on charts, Applications, and values: `platform/addons/<environment>/`
 - Terraform environments: `terraform/environments/dev/` and `terraform/environments/qa/`
 - Local image publishing script: `apps/image.sh`
+
+
+===
+Test
+Find files matching `eks-platform-demo/platform/**/*.yaml`
+
+Read 
+Completed with input: {
+  "path": "c:\\Users\\A200159779\\Downloads\\Repo\\POC\\eks-platform-demo\\platform\\argocd\\dev-root.yaml"
+}
+
+Read 
+Completed with input: {
+  "path": "c:\\Users\\A200159779\\Downloads\\Repo\\POC\\eks-platform-demo\\scripts\\mirror-addon-charts.sh"
+}
+
+Search for `helm upgrade|helm install|argo/argo-cd|dev-values.yaml|dev-root.yaml|argocd`
+
+Ran terminal command: Get-Command helm,kubectl -ErrorAction SilentlyContinue | Select-Object Name,Source; kubectl config get-contexts -o name
+
+Edit 
+
+Ran terminal command: git -C 'C:\Users\A200159779\Downloads\Repo\POC\eks-platform-demo' diff --check; if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}; git -C 'C:\Users\A200159779\Downloads\Repo\POC\eks-platform-demo' status --short
+
+Read , lines 190 to 285
+Completed with input: {
+  "path": "c:\\Users\\A200159779\\Downloads\\Repo\\POC\\eks-platform-demo\\README.md",
+  "view_range": [
+    190,
+    285
+  ]
+}
+
+Get file or directory contents
+Completed with input: {
+  "owner": "argoproj",
+  "repo": "argo-helm",
+  "path": "charts/argo-cd/Chart.yaml",
+  "ref": "refs/heads/main",
+  "fields": [
+    "name",
+    "path",
+    "sha"
+  ]
+}
+
+Added artifact "Argo CD upgrade and GitOps instructions"
+Completed with input: {
+  "items": [
+    {
+      "type": "file",
+      "label": "Argo CD upgrade and GitOps instructions",
+      "isArtifact": true,
+      "uri": "file:///c:/Users/A200159779/Downloads/Repo/POC/eks-platform-demo/README.md"
+    }
+  ]
+}
+
+Argo CD itself is installed by a **Helm release** named `argocd` in the cluster’s `argocd` namespace. That release provides the server, application controller, repo-server, Redis, Dex, ApplicationSet controller, and notifications. The chart defaults enable Dex, but this repo does not configure an SSO provider.
+
+In this checkout there is **no `platform/dev-values.yaml`**. `platform/argocd/dev-root.yaml` is the GitOps root Application—not Helm values. Add-on values are under `platform/addons/dev/<addon>/values.yaml`.
+
+I checked the upstream chart metadata: chart **10.10.5** packages Argo CD **v3.5.5**. The updated commands are also in `README.md`.
+
+### Upgrade Argo CD in dev
+
+My available kubeconfig had `careerportal-preprod` as its active context, so I **did not run commands against your cluster**. These commands explicitly configure the demo dev context and check it before changing anything. Run them from Git Bash at the repository root:
+
+```bash
+aws sso login --profile sandbox3
+export AWS_PROFILE=sandbox3
+
+aws sts get-caller-identity
+aws eks describe-cluster --region eu-central-1 \
+  --name eks-platform-demo-dev --query 'cluster.arn' --output text
+
+aws eks update-kubeconfig --region eu-central-1 \
+  --name eks-platform-demo-dev --alias dev
+
+CTX=dev
+kubectl --context "$CTX" get nodes
+helm list --kube-context "$CTX" --namespace argocd
+```
+
+Confirm the AWS account, cluster, and Helm release are the intended ones. Back up the existing release values privately—**don’t commit or share this file**, as it may contain credentials:
+
+```bash
+helm get values argocd --kube-context "$CTX" --namespace argocd \
+  --output yaml > "$HOME/argocd-values-backup.yaml"
+```
+
+If the installed Argo CD is several major versions behind, review the upstream upgrade notes before proceeding. Then upgrade the existing release and keep its Helm-stored overrides:
+
+```bash
+helm repo add argo https://argoproj.github.io/argo-helm --force-update
+helm repo update
+
+helm upgrade argocd argo/argo-cd --version 10.10.5 \
+  --namespace argocd --reuse-values --wait --timeout 10m \
+  --kube-context "$CTX"
+
+helm list --kube-context "$CTX" --namespace argocd
+kubectl --context "$CTX" get pods,deployments,statefulsets -n argocd
+kubectl --context "$CTX" rollout status deployment/argocd-server --timeout=10m
+kubectl --context "$CTX" rollout status statefulset/argocd-application-controller --timeout=10m
+```
+
+`helm repo update` only refreshes Helm’s local chart index; `helm upgrade` is what updates the running Argo CD components. `--reuse-values` retains overrides saved in the Helm release. It cannot recover settings that were never stored there.
+
+### Apply the dev add-on changes
+
+Argo CD does **not** automatically see local, unpushed edits. Commit and push the changed dev values to the branch the Applications track (`develop`):
+
+```bash
+git add platform/addons/dev/prometheus/values.yaml \
+  platform/addons/dev/tempo/values.yaml \
+  platform/addons/dev/opentelemetry-collector/values.yaml
+git commit -m "Persist monitoring data and scrape OpenTelemetry"
+git push origin develop
+```
+
+Existing child Applications should then reconcile those changes automatically. Check their status:
+
+```bash
+kubectl --context "$CTX" -n argocd get applications
+```
+
+Only if the root Application is missing or needs applying:
+
+```bash
+kubectl --context "$CTX" apply -f platform/argocd/dev-root.yaml
+```
+
+This updates Argo CD and applies the monitoring configuration in Git; it **does not upgrade every pinned add-on chart**. Those chart versions are separately pinned in each add-on’s `application.yaml`, and should be changed and tested individually rather than blindly moved to “latest.”
