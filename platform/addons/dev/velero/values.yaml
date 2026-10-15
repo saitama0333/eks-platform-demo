@@ -1,0 +1,31 @@
+serviceAccount:
+  server:
+    create: true
+    name: velero
+credentials:
+  useSecret: false
+configuration:
+  backupStorageLocation:
+    - name: default
+      provider: aws
+      bucket: tf-gitops-nikhil
+      prefix: backup/dev
+      config:
+        region: eu-central-1
+  volumeSnapshotLocation: []
+  uploaderType: kopia
+snapshotsEnabled: false
+deployNodeAgent: true
+initContainers:
+  - name: velero-plugin-for-aws
+    image: velero/velero-plugin-for-aws:v1.10.0
+    imagePullPolicy: IfNotPresent
+    volumeMounts:
+      - mountPath: /target
+        name: plugins
+schedules:
+  daily:
+    schedule: "0 2 * * *"
+    template:
+      ttl: 168h
+      includedNamespaces: [default]

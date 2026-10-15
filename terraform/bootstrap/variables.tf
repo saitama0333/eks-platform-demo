@@ -1,7 +1,7 @@
 variable "aws_region" {
-  description = "AWS region for the EKS platform"
+  description = "AWS region for the EKS platform and state bucket (Frankfurt)"
   type        = string
-  default     = "ap-south-1"
+  default     = "eu-central-1"
 }
 
 variable "project_name" {
