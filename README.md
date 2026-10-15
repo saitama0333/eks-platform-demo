@@ -230,26 +230,72 @@ image to ECR and updates that app's environment values. Configure
 workflow uses GitHub OIDC, not long-lived AWS access keys. Allow the
 repository Actions token to create pull requests.
 
-## Access and data
+## Access the services
 
-Argo CD and Grafana are internal services. Use port forwarding in separate
-Git Bash windows:
+Run this from the repository root in Git Bash after connecting `kubectl` to
+the cluster. The script starts the available port-forwards in the background:
 
 ```bash
-kubectl --context dev -n argocd port-forward svc/argocd-server 8080:443
-kubectl --context dev -n monitoring port-forward svc/kube-prometheus-stack-grafana 3000:80
+bash scripts/port-forward.sh dev start
 ```
 
-Open `https://localhost:8080` for Argo CD and `http://localhost:3000` for
-Grafana. Change the context from `dev` to `qa` when needed. The Grafana
-password and initial Argo CD admin password are stored in Kubernetes Secrets
-in their respective namespaces.
+Use `qa` for the QA cluster. Open the URLs printed by the script, including
+Argo CD, Grafana, Prometheus, Alertmanager, Tempo, OpenTelemetry, and the
+sample apps. The OTEL and Velero endpoints are APIs/metrics, not dashboards.
+Velero has no web UI in this project. Loki is not installed either; the
+OpenTelemetry Collector currently writes logs to its debug exporter, so there
+is no searchable or persistent log UI.
+
+Check or stop the background forwards with:
+
+```bash
+bash scripts/port-forward.sh dev status
+bash scripts/port-forward.sh dev stop
+```
+
+The script only binds to `127.0.0.1` on the computer where it runs. Port
+forwards are local access, not public endpoints. If you run them on a remote
+host over SSH, use SSH local forwarding to reach that host's localhost ports.
+
+The Grafana password and initial Argo CD admin password are in Kubernetes
+Secrets in their respective namespaces.
 
 Prometheus, Grafana, Alertmanager, Tempo, and the Python demo use encrypted
-gp3 persistent volumes. These volumes survive pod restarts, but this setup
-does not back up monitoring data or EBS volumes. The configured Velero
-schedule covers workloads in the `default` namespace only. The OpenTelemetry
-Collector sends logs to its debug exporter; there is no persistent log store.
+gp3 persistent volumes. They survive pod restarts, but this setup does not
+back up monitoring data or EBS volumes. The Velero schedule covers workloads
+in the `default` namespace only.
+
+## Bash aliases
+
+Add these to `~/.bashrc` in Git Bash, then reload it with `source ~/.bashrc`:
+
+```bash
+alias tf='terraform'
+alias tfi='terraform init'
+alias tfv='terraform validate'
+alias tfp='terraform plan'
+alias tfo='terraform output'
+alias tfdev='terraform -chdir=terraform/environments/dev'
+alias tfqa='terraform -chdir=terraform/environments/qa'
+
+alias k='kubectl'
+alias kctx='kubectl config current-context'
+alias kdev='kubectl --context dev'
+alias kqa='kubectl --context qa'
+alias kpods='kubectl get pods -A'
+alias kapps='kubectl get applications -n argocd'
+
+alias pfdev='bash scripts/port-forward.sh dev start'
+alias pfqa='bash scripts/port-forward.sh qa start'
+alias pfstopdev='bash scripts/port-forward.sh dev stop'
+alias pfstopqa='bash scripts/port-forward.sh qa stop'
+
+alias gs='git status --short'
+alias gd='git diff'
+```
+
+For example, after adding these aliases, `tfdev plan` runs Terraform from the
+dev environment directory and `kdev get pods -A` lists pods in dev.
 
 ## Useful paths
 
@@ -259,3 +305,4 @@ Collector sends logs to its debug exporter; there is no persistent log store.
 - Argo CD roots: `platform/argocd/`
 - Add-on Applications and values: `platform/addons/<environment>/`
 - GitHub Actions workflow: `.github/workflows/ci.yml`
+- Local port forwards: `scripts/port-forward.sh`
