@@ -8,29 +8,145 @@ applications and platform add-ons.
 There is no custom domain, Ingress, or public HTTPS endpoint. Services are
 internal to the cluster; use `kubectl port-forward` for local testing.
 
-## First-time provisioning
+## Start from zero: dev
 
-If the target EKS cluster or its ECR repositories do not exist yet, provision
-them first from `terraform/environments/dev/` or
-`terraform/environments/qa/`. Create the local `terraform.tfvars` from that
-environment's example and set the trusted public IP CIDR(s). Then, from the
-repository root in Git Bash, create and review a plan before applying it:
+Use this sequence if dev was destroyed and you want to rebuild it. Run the
+commands from Git Bash at the repository root, and replace `sandbox3` with
+your AWS CLI profile. Confirm the AWS account is the intended account before
+creating or deleting resources:
 
 ```bash
-cd terraform/environments/dev # use qa for the QA environment
+aws sso login --profile sandbox3
+export AWS_PROFILE=sandbox3
+aws sts get-caller-identity
+aws s3api head-bucket --bucket tf-gitops-nikhil --region eu-central-1
+```
+
+The existing S3 bucket is required for Terraform state and Velero backups.
+The dev Terraform state uses the `dev/terraform.tfstate` key. Do not delete
+the bucket or alter the state key as part of rebuilding dev.
+
+If this is the first local checkout setup, create
+`terraform/environments/dev/terraform.tfvars` from
+`terraform/environments/dev/terraform.tfvars.example`. Set
+`cluster_endpoint_public_access_cidrs` to your current trusted public IP
+address in `/32` form. Keep the dev account OIDC settings as
+`create_github_oidc_provider = true` and `github_oidc_provider_arn = null`.
+Review network and node-size values. Keep this local file out of Git.
+
+Provision the cluster, ECR repositories, IAM roles, and supporting AWS
+resources:
+
+```bash
+cd terraform/environments/dev
+terraform init
+terraform plan -out=tfplan
+terraform show tfplan
+```
+
+Review the plan for the expected AWS account, Frankfurt region
+(`eu-central-1`), and dev resources. Do not apply an unexpected destroy or
+replacement. Apply the reviewed plan:
+
+```bash
+terraform apply tfplan
+terraform output sample_app_ecr_repositories
+terraform output -raw github_actions_ecr_role_arn
+terraform output -raw github_oidc_provider_arn
+cd ../../..
+```
+
+Record the OIDC provider ARN securely for future QA provisioning. If using
+GitHub Actions to publish images, set the GitHub repository variable
+`AWS_ROLE_ARN_DEV` to the `github_actions_ecr_role_arn` output. Terraform
+creates the dev ECR repositories, but does not publish application images.
+
+Continue with [Deployment order](#deployment-order): build and push all three
+images (or use GitHub Actions), commit/push the image values and any desired
+platform-values changes to `develop`, install or upgrade Argo CD, and apply
+`platform/argocd/dev-root.yaml`. Do not apply the root until the dev image
+values contain real ECR repository names and tags.
+
+### If dev was destroyed
+
+`terraform destroy` removes the dev cluster and its Terraform-managed AWS
+resources. It does not remove the separately managed Terraform/Velero S3
+bucket or the objects in it. It will also remove dev's account-wide GitHub OIDC
+provider if dev created it; any already-running QA GitHub Actions role that
+uses that provider will stop working until the provider is recreated and QA
+is updated to use its new ARN.
+
+The ECR repositories are configured with `force_delete = false`. Terraform
+cannot delete a repository that still contains images. If you want Terraform
+to remove the repositories as part of destroy, first decide whether those
+images are disposable, then delete them from the three dev repositories in
+the ECR console. Deleting images is irreversible. Keep the S3 state bucket
+and its state objects; do not manually delete or edit the remote state.
+
+Before destroying, back up any app or monitoring data you need. The current
+Velero schedule covers only the `default` namespace, and EBS volumes are not
+backed up by this configuration (`snapshotsEnabled` is false). Destroying the
+cluster can therefore remove PVC-backed app and monitoring data.
+
+To preview and perform a full dev destroy, after confirming the AWS account and
+that the ECR images and cluster data can be deleted:
+
+```bash
+cd terraform/environments/dev
+terraform init
+terraform plan -destroy -out=tfplan-destroy
+terraform show tfplan-destroy
+```
+
+Only if the plan targets the intended dev resources and you accept the data
+loss, run:
+
+```bash
+terraform apply tfplan-destroy
+```
+
+If destroy fails because ECR repositories contain images, read the error,
+delete only the intended dev images, and re-create and review a new destroy
+plan before applying it. Do not delete the QA repositories or shared S3 bucket.
+After destroy succeeds, follow [Start from zero: dev](#start-from-zero-dev).
+
+## Add QA later
+
+Keep dev in place while creating QA. QA has its own Terraform state key,
+cluster, ECR repositories, and Velero prefix, but reuses the account-wide
+GitHub OIDC provider created by dev.
+
+Copy `terraform/environments/qa/terraform.tfvars.example` to
+`terraform/environments/qa/terraform.tfvars`. Set the trusted public API CIDR
+and replace `REPLACE_WITH_DEV_GITHUB_OIDC_PROVIDER_ARN` with the value recorded
+from dev's `terraform output -raw github_oidc_provider_arn`. Keep
+`create_github_oidc_provider = false`.
+
+Then run the reviewed Terraform plan and apply from the QA directory:
+
+```bash
+cd terraform/environments/qa
 terraform init
 terraform plan -out=tfplan
 terraform show tfplan
 terraform apply tfplan
+terraform output sample_app_ecr_repositories
+terraform output -raw github_actions_ecr_role_arn
 cd ../../..
 ```
 
-The Terraform state bucket must already exist. Never apply a plan that
-contains unexpected changes. Keep `terraform.tfvars` local; do not commit it.
+If using GitHub Actions, set the repository variable `AWS_ROLE_ARN_QA` to the
+QA role ARN. Build and push QA images using `bash apps/image.sh qa`, then
+review and push the `values-qa.yaml` updates to `develop`, or use the Actions
+promotion workflow and merge its PRs. Finally connect to the QA cluster,
+install Argo CD there if it is not already installed, and apply
+`platform/argocd/qa-root.yaml` with the `qa` context. Use the same deployment,
+verification, and UI-access steps below with `ENVIRONMENT=qa`.
 
-Dev creates the account-wide GitHub OIDC provider. QA should reuse the
-`github_oidc_provider_arn` output from dev and set
-`create_github_oidc_provider = false`.
+If dev is destroyed after QA has been created, restore dev first, capture the
+new `github_oidc_provider_arn`, update QA's local `terraform.tfvars`, then
+review and apply a QA Terraform plan before relying on QA's GitHub Actions
+image-publishing role again.
 
 ## Deployment order
 
