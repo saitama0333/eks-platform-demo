@@ -29,28 +29,28 @@ permissions:
 jobs:
   secrets:
     name: Scan repository secrets
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
       - name: Checkout full history
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Install and run Gitleaks
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   changes:
     name: Detect application changes
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       applications: ${{ steps.detect.outputs.applications }}
     steps:
       - name: Checkout full history
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -86,10 +86,10 @@ jobs:
 
   helm-lint:
     name: Lint and render application Helm charts
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Check Bash script syntax
         run: |
@@ -128,7 +128,7 @@ jobs:
     name: Test, build, and scan ${{ matrix.app }}
     needs: [secrets, changes]
     if: needs.changes.outputs.applications == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -137,11 +137,11 @@ jobs:
       APP_NAME: ${{ matrix.app }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
         if: matrix.app == 'python-demo'
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -163,7 +163,7 @@ jobs:
 
       - name: Set up Java and Maven cache
         if: matrix.app == 'java-demo'
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
@@ -205,7 +205,7 @@ jobs:
     name: Manual ${{ inputs.target_environment }} promotion for ${{ matrix.app }}
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/develop'
     needs: [changes, test, helm-lint]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -221,20 +221,20 @@ jobs:
       ECR_REPOSITORY: eks-platform-demo/${{ inputs.target_environment }}/${{ matrix.app }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Configure dev AWS credentials using GitHub OIDC
         if: inputs.target_environment == 'dev'
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN_DEV }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Configure QA AWS credentials using GitHub OIDC
         if: inputs.target_environment == 'qa'
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN_QA }}
           aws-region: ${{ env.AWS_REGION }}
@@ -244,7 +244,7 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Set up Python for GitOps manifest update
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
