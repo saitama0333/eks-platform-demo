@@ -33,3 +33,8 @@ output "node_security_group_id" {
   description = "EKS node security group ID"
   value       = module.eks.node_security_group_id
 }
+
+output "managed_node_group_autoscaling_group_names" {
+  description = "Autoscaling group names for the managed EKS node groups"
+  value       = module.eks.eks_managed_node_groups_autoscaling_group_names
+}

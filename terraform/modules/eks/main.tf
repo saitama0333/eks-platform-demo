@@ -148,8 +148,7 @@ module "eks" {
       max_size     = var.node_max_size
       desired_size = var.node_desired_size
 
-      subnet_ids = var.private_subnet_ids
-
+      subnet_ids    = var.private_subnet_ids
       capacity_type = "ON_DEMAND"
 
       disk_size = var.node_disk_size

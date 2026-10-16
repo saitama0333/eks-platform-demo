@@ -59,15 +59,21 @@ resources. Apply only after reviewing it:
 
 ```bash
 terraform apply tfplan
+terraform output -raw dev_ingress_nlb_dns_name \
+  | tee ../../../dev-ingress-nlb-dns-name.txt
 terraform output sample_app_ecr_repositories
 terraform output -raw github_actions_ecr_role_arn
 terraform output -raw github_oidc_provider_arn
 cd ../../..
 ```
 
-Terraform creates the ECR repositories, but it does not build or push app
-images. Save the OIDC provider ARN for QA. If using GitHub Actions to publish
-images, add the dev role ARN as the repository variable `AWS_ROLE_ARN_DEV`.
+Terraform creates the ECR repositories and the public dev ingress NLB, but it
+does not build or push app images. The command also saves the NLB DNS name to
+`dev-ingress-nlb-dns-name.txt` in the repository root. In Account A, create
+CNAME records for `dev.appledore.in` and `*.dev.appledore.in`, both pointing
+to that NLB DNS name. Save the OIDC provider ARN for QA. If using GitHub
+Actions to publish images, add the dev role ARN as the repository variable
+`AWS_ROLE_ARN_DEV`.
 
 ### Build and publish dev images
 
@@ -88,11 +94,30 @@ the changes:
 git diff -- helm/apps
 ```
 
-Commit and push the values to `develop`; Argo CD reads that branch:
+Before pushing the ingress configuration, replace the fail-closed
+`127.0.0.1/32` source-range annotations in `helm/argocd/values.yaml` and
+`platform/addons/dev/prometheus/values.yaml` with the public egress CIDRs
+allowed to access the admin tools. You can use the trusted workstation/VPN
+egress CIDRs configured for the EKS API. Do not replace them with
+`0.0.0.0/0`. The sample app at `dev.appledore.in` stays public; Argo CD,
+Grafana, Prometheus, and Alertmanager are restricted to those CIDRs.
+The ACME contact email is optional. No paid `appledore.in` mailbox is needed:
+if you want expiry and account notices, add an email address you already
+control to the `email` field in
+`platform/addons/dev/cert-manager-issuer/resources/cluster-issuer.yaml`.
+
+Commit and push the configuration to `develop`; Argo CD reads that branch:
 
 ```bash
-git add helm/apps/*/values-dev.yaml
-git commit -m "Update dev application images"
+git add terraform/environments/dev/main.tf terraform/environments/dev/outputs.tf \
+  terraform/modules/nlb terraform/modules/eks/main.tf \
+  terraform/modules/eks/outputs.tf helm/argocd/values.yaml \
+  helm/apps/*/values-dev.yaml helm/apps/nginx-demo/templates/ingress.yaml \
+  platform/addons/dev/cert-manager \
+  platform/addons/dev/cert-manager-issuer \
+  platform/addons/dev/ingress-nginx \
+  platform/addons/dev/prometheus/values.yaml README.md
+git commit -m "Add dev TLS ingress and tool access"
 git push origin develop
 ```
 
@@ -109,14 +134,15 @@ aws eks update-kubeconfig --region eu-central-1 \
 kubectl config use-context dev
 ```
 
-For a new cluster, install Argo CD with the pinned Helm chart. Chart `10.10.5`
-packages Argo CD `v3.5.5`:
+Install or upgrade Argo CD with the pinned Helm chart and the repository
+values. Chart `10.10.5` packages Argo CD `v3.5.5`:
 
 ```bash
 helm repo add argo https://argoproj.github.io/argo-helm --force-update
 helm repo update
 helm upgrade --install argocd argo/argo-cd --version 10.10.5 \
-  --namespace argocd --create-namespace --wait --kube-context dev
+  --namespace argocd --create-namespace --wait --kube-context dev \
+  --values helm/argocd/values.yaml
 ```
 
 This Helm release runs Argo CD in the cluster, including the server,
@@ -136,6 +162,22 @@ The root discovers the dev Applications under `platform/addons/dev/` and
 `platform/apps/dev/`. Argo CD then installs the pinned add-on charts and app
 charts from Git. Do not manually run Helm installs for add-ons managed by
 Argo CD.
+
+Once DNS resolves, open `https://dev.appledore.in` for the sample app and
+`https://argocd.dev.appledore.in`, `https://grafana.dev.appledore.in`,
+`https://prometheus.dev.appledore.in`, and
+`https://alertmanager.dev.appledore.in` for the tools. Cert-manager obtains
+and renews individual Let's Encrypt certificates using HTTP-01. The DNS owner
+must keep the two CNAME records in place. OTEL ingestion stays cluster-internal
+because the collector is an API endpoint rather than a web UI.
+
+This is a dev-grade, single-cluster setup, not a production-ready platform.
+The admin tools are protected by source-IP allowlists, not SSO; access is
+denied until the placeholder CIDRs are replaced. Tempo is accessed from
+Grafana and is not separately exposed. Review node-group scaling, backups and
+restore procedures, monitoring/alerting, security updates, and a real identity
+provider before production use. High availability and disaster recovery are
+not included in this initial setup.
 
 ## 2. Add QA
 

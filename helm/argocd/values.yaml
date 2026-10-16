@@ -1,4 +1,17 @@
 
 server:
+  extraArgs:
+    - --insecure
   ingress:
-    enabled: false
+    enabled: true
+    ingressClassName: nginx
+    hosts:
+      - argocd.dev.appledore.in
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+      nginx.ingress.kubernetes.io/whitelist-source-range: "127.0.0.1/32"
+    tls:
+      - secretName: argocd-dev-appledore-tls
+        hosts:
+          - argocd.dev.appledore.in
+    https: false

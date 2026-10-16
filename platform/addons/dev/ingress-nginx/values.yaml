@@ -1,0 +1,14 @@
+controller:
+  kind: DaemonSet
+  nodeSelector:
+    role: core
+  ingressClass: nginx
+  ingressClassResource:
+    name: nginx
+    default: true
+  service:
+    type: NodePort
+    externalTrafficPolicy: Cluster
+    nodePorts:
+      http: 30080
+      https: 30443
