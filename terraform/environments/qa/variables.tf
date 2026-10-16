@@ -37,7 +37,7 @@ variable "create_github_oidc_provider" {
 variable "velero_bucket_name" {
   description = "Existing S3 bucket shared with Terraform state"
   type        = string
-  default     = "tf-gitops-nikhil"
+  default     = "appledore-gitops"
 }
 
 variable "velero_prefix" {

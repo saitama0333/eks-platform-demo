@@ -8,7 +8,7 @@ configuration:
   backupStorageLocation:
     - name: default
       provider: aws
-      bucket: tf-gitops-nikhil
+      bucket: appledore-gitops
       prefix: backup/dev
       config:
         region: eu-central-1

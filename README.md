@@ -7,7 +7,7 @@ branch and keeps the cluster in sync with Git.
 
 Dev and QA have separate clusters, ECR repositories, Terraform state, and
 Argo CD installations. Both use Frankfurt (`eu-central-1`). The Terraform
-state and Velero backups use an existing S3 bucket, `tf-gitops-nikhil`.
+state and Velero backups use an existing S3 bucket, `appledore-gitops`.
 
 ## Requirements
 
@@ -30,7 +30,7 @@ Sign in and confirm the AWS account and the existing Terraform state bucket:
 aws sso login --profile sandbox3
 export AWS_PROFILE=sandbox3
 aws sts get-caller-identity
-aws s3api head-bucket --bucket tf-gitops-nikhil --region eu-central-1
+aws s3api head-bucket --bucket appledore-gitops --region eu-central-1
 ```
 
 Copy the dev example file and edit the local copy:

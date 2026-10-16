@@ -1,7 +1,7 @@
 # Copy to terraform.tfvars and replace the trusted Kubernetes API CIDR and
 # network values if they overlap any connected VPC, VPN, or peered network.
 cluster_endpoint_public_access_cidrs = ["REPLACE_WITH_YOUR_PUBLIC_IP/32"]
-velero_bucket_name                   = "tf-gitops-nikhil"
+velero_bucket_name                   = "appledore-gitops"
 velero_prefix                        = "backup/qa"
 # Dev is applied first and creates the account provider. Copy its output ARN.
 create_github_oidc_provider = false
