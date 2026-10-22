@@ -1,4 +1,5 @@
-replicas: 2
+# Temporarily keep one replica while dev application workloads are stopped.
+replicas: 1
 podDisruptionBudget:
   enabled: true
   minAvailable: 1
