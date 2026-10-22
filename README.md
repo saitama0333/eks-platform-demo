@@ -389,6 +389,16 @@ host over SSH, use SSH local forwarding to reach that host's localhost ports.
 The Grafana password and initial Argo CD admin password are in Kubernetes
 Secrets in their respective namespaces.
 
+If public Argo CD ingress is unavailable, forward its HTTPS service port and
+open the local URL (accept the certificate hostname warning for localhost):
+
+```bash
+kubectl --context dev -n argocd port-forward svc/argocd-server 8443:443
+```
+
+Then open `https://localhost:8443`. Keep the port-forward command running while
+using the browser.
+
 Prometheus, Grafana, Alertmanager, Tempo, and the Python demo use encrypted
 gp3 persistent volumes. They survive pod restarts, but this setup does not
 back up monitoring data or EBS volumes. The Velero schedule covers workloads
