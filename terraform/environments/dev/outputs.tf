@@ -22,3 +22,8 @@ output "github_oidc_provider_arn" {
   description = "Account-wide GitHub Actions OIDC provider ARN for other environment roots"
   value       = module.ecr.github_oidc_provider_arn
 }
+
+output "dev_ingress_nlb_dns_name" {
+  description = "Public DNS name of the dev ingress Network Load Balancer"
+  value       = module.ingress_nlb.dns_name
+}

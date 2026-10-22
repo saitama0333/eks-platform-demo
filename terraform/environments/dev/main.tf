@@ -48,4 +48,35 @@ module "karpenter" {
   depends_on = [module.eks]
 }
 
+module "ingress_nlb" {
+  source = "../../modules/nlb"
 
+  name                   = "${var.project_name}-${var.environment}"
+  vpc_id                 = module.vpc.vpc_id
+  public_subnet_ids      = module.vpc.public_subnet_ids
+  autoscaling_group_name = module.eks.managed_node_group_autoscaling_group_names[0]
+
+  tags = {
+    Project     = var.project_name
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+  }
+}
+
+resource "aws_vpc_security_group_ingress_rule" "ingress_http_nodeport" {
+  security_group_id            = module.eks.node_security_group_id
+  referenced_security_group_id = module.ingress_nlb.security_group_id
+  from_port                    = 30080
+  to_port                      = 30080
+  ip_protocol                  = "tcp"
+  description                  = "HTTP from the dev ingress NLB"
+}
+
+resource "aws_vpc_security_group_ingress_rule" "ingress_https_nodeport" {
+  security_group_id            = module.eks.node_security_group_id
+  referenced_security_group_id = module.ingress_nlb.security_group_id
+  from_port                    = 30443
+  to_port                      = 30443
+  ip_protocol                  = "tcp"
+  description                  = "HTTPS from the dev ingress NLB"
+}

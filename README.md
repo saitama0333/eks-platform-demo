@@ -6,19 +6,23 @@ roles. Argo CD reads the Kubernetes and Helm configuration from the `develop`
 branch and keeps the cluster in sync with Git.
 
 Dev and QA have separate clusters, ECR repositories, Terraform state, and
-Argo CD installations. Both use Frankfurt (`eu-central-1`). The Terraform
-state and Velero backups use an existing S3 bucket, `tf-gitops-nikhil`.
+Argo CD installations in AWS Account B. Both use Frankfurt (`eu-central-1`).
+The existing `tf-gitops-nikhil` S3 bucket holds Terraform state and Velero
+backups and must also be in Account B. The domain registration and authoritative
+Route 53 hosted zone remain in Account A; Terraform does not create or change
+the domain, hosted zone, or DNS records.
 
 ## Requirements
 
 Install and configure:
 
-- AWS CLI with access to the intended AWS account
+- AWS CLI with access to AWS Account B
 - Git Bash, Git, Terraform, `kubectl`, and Helm
 - Docker Desktop, if building images on your computer
 
 Run the commands below from the repository root in Git Bash unless a step says
-otherwise. Replace `sandbox3` with your AWS CLI profile.
+otherwise. Replace `sandbox3` with an AWS CLI profile authenticated to Account
+B. Do not use Account A credentials for Terraform.
 
 ## 1. Deploy dev
 
@@ -33,15 +37,33 @@ aws sts get-caller-identity
 aws s3api head-bucket --bucket tf-gitops-nikhil --region eu-central-1
 ```
 
-Copy the dev example file and edit the local copy:
+Confirm that the `Account` returned by STS is the 12-digit Account B ID, and
+that the existing `tf-gitops-nikhil` bucket is owned by Account B and accessible
+for state and backups. The AWS provider is configured to reject credentials
+for any account other than the `aws_account_id` supplied below; this guard
+does not verify ownership of the separately configured S3 backend bucket.
+The separate `terraform/bootstrap` configuration creates a differently named
+`eks-platform-demo-tfstate-<account-id>` bucket, not `tf-gitops-nikhil`; it is
+not needed when the documented backend bucket already exists. If you run the
+bootstrap separately, set its `aws_account_id` to Account B as well.
+
+`terraform.tfvars.example` is the version-controlled template; copy it once to
+the ignored, machine-local `terraform.tfvars` and edit that copy. Keeping both
+is intentional: the example documents required inputs without committing
+workstation IPs or other environment-specific values. Never replace an existing
+`terraform.tfvars` blindly; merge the required values into it.
 
 ```bash
 cp terraform/environments/dev/terraform.tfvars.example \
   terraform/environments/dev/terraform.tfvars
 ```
 
-Set `cluster_endpoint_public_access_cidrs` to your trusted public IP in `/32`
-format. Dev creates the account-level GitHub OIDC provider, so keep
+The AWS account ID is `829647177071`. Add or update `aws_account_id` to that
+value in an existing local file, keeping its other settings.
+
+The example already sets `aws_account_id` to `829647177071`. Set
+`cluster_endpoint_public_access_cidrs` to your trusted public IP in `/32`
+format. Dev creates the account-level GitHub OIDC provider in Account B, so keep
 `create_github_oidc_provider = true` and `github_oidc_provider_arn = null`.
 Do not commit `terraform.tfvars`.
 
@@ -49,25 +71,56 @@ Do not commit `terraform.tfvars`.
 
 ```bash
 cd terraform/environments/dev
-terraform init
+terraform init -reconfigure
 terraform plan -out=tfplan
 terraform show tfplan
 ```
+
+The backend now points to `tf-gitops-nikhil` at `dev/terraform.tfstate`.
+`-reconfigure` selects this backend; it does not migrate state from another
+bucket. If this environment already has state in a different bucket, stop and
+plan a state migration before running a plan or apply. For a fresh deployment,
+confirm the target backend bucket and key are correct before continuing.
 
 Check that the plan is for the correct account, Frankfurt region, and dev
 resources. Apply only after reviewing it:
 
 ```bash
 terraform apply tfplan
+terraform output -raw dev_ingress_nlb_dns_name \
+  | tee ../../../dev-ingress-nlb-dns-name.txt
 terraform output sample_app_ecr_repositories
 terraform output -raw github_actions_ecr_role_arn
 terraform output -raw github_oidc_provider_arn
 cd ../../..
 ```
 
-Terraform creates the ECR repositories, but it does not build or push app
-images. Save the OIDC provider ARN for QA. If using GitHub Actions to publish
-images, add the dev role ARN as the repository variable `AWS_ROLE_ARN_DEV`.
+Terraform creates the ECR repositories and the public dev ingress NLB, but it
+does not build or push app images. The command also saves the NLB DNS name to
+`dev-ingress-nlb-dns-name.txt` in the repository root. Verify the AWS account
+ID in each `helm/apps/*/values-dev.yaml` ECR image URI matches Account B; if it
+does not, build and publish the images using Account B before deploying.
+
+### Configure DNS in Account A
+
+GoDaddy should delegate `appledore.in` to the name servers of the authoritative
+Route 53 hosted zone in Account A. Create the following CNAME records in that
+hosted zone (not in Account B); both values are the NLB DNS name saved above:
+
+| Record name | Type | Value |
+| --- | --- | --- |
+| `dev` | CNAME | Account B's dev ingress NLB DNS name |
+| `*.dev` | CNAME | Account B's dev ingress NLB DNS name |
+
+The wildcard record covers one-label hostnames such as `argocd.dev`,
+`grafana.dev`, `prometheus.dev`, and `alertmanager.dev`. Leave the GoDaddy
+nameserver delegation pointed at Account A's hosted zone. Terraform does not
+provision cross-account DNS records or change the GoDaddy delegation. Confirm
+the delegation and both CNAMEs resolve publicly before expecting the URLs to
+work.
+
+Save the OIDC provider ARN for QA. If using GitHub Actions to publish images,
+add the dev role ARN as the repository variable `AWS_ROLE_ARN_DEV`.
 
 ### Build and publish dev images
 
@@ -88,11 +141,35 @@ the changes:
 git diff -- helm/apps
 ```
 
-Commit and push the values to `develop`; Argo CD reads that branch:
+Before pushing the ingress configuration, replace the fail-closed
+`127.0.0.1/32` source-range annotations in `helm/argocd/values.yaml` and
+`platform/addons/dev/prometheus/values.yaml` with the public egress CIDRs
+allowed to access the admin tools. You can use the trusted workstation/VPN
+egress CIDRs configured for the EKS API. Do not replace them with
+`0.0.0.0/0`. The sample app at `dev.appledore.in` stays public; Argo CD,
+Grafana, Prometheus, and Alertmanager are restricted to those CIDRs.
+The ACME contact email is optional. No paid `appledore.in` mailbox is needed:
+if you want expiry and account notices, add an email address you already
+control to the `email` field in
+`platform/addons/dev/cert-manager-issuer/resources/cluster-issuer.yaml`.
+
+Commit and push the configuration to `develop`; Argo CD reads that branch:
 
 ```bash
-git add helm/apps/*/values-dev.yaml
-git commit -m "Update dev application images"
+git add terraform/environments/dev/main.tf terraform/environments/dev/outputs.tf \
+  terraform/environments/dev/providers.tf terraform/environments/dev/variables.tf \
+  terraform/environments/dev/terraform.tfvars.example \
+  terraform/environments/qa/providers.tf terraform/environments/qa/variables.tf \
+  terraform/environments/qa/terraform.tfvars.example \
+  terraform/bootstrap/providers.tf terraform/bootstrap/variables.tf \
+  terraform/modules/nlb terraform/modules/eks/main.tf \
+  terraform/modules/eks/outputs.tf helm/argocd/values.yaml \
+  helm/apps/*/values-dev.yaml helm/apps/nginx-demo/templates/ingress.yaml \
+  platform/addons/dev/cert-manager \
+  platform/addons/dev/cert-manager-issuer \
+  platform/addons/dev/ingress-nginx \
+  platform/addons/dev/prometheus/values.yaml README.md
+git commit -m "Add dev TLS ingress and tool access"
 git push origin develop
 ```
 
@@ -109,14 +186,15 @@ aws eks update-kubeconfig --region eu-central-1 \
 kubectl config use-context dev
 ```
 
-For a new cluster, install Argo CD with the pinned Helm chart. Chart `10.10.5`
-packages Argo CD `v3.5.5`:
+Install or upgrade Argo CD with the pinned Helm chart and the repository
+values. Chart `10.10.5` packages Argo CD `v3.5.5`:
 
 ```bash
 helm repo add argo https://argoproj.github.io/argo-helm --force-update
 helm repo update
 helm upgrade --install argocd argo/argo-cd --version 10.10.5 \
-  --namespace argocd --create-namespace --wait --kube-context dev
+  --namespace argocd --create-namespace --wait --kube-context dev \
+  --values helm/argocd/values.yaml
 ```
 
 This Helm release runs Argo CD in the cluster, including the server,
@@ -137,6 +215,33 @@ The root discovers the dev Applications under `platform/addons/dev/` and
 charts from Git. Do not manually run Helm installs for add-ons managed by
 Argo CD.
 
+Once DNS resolves, open `https://dev.appledore.in` for the sample app and
+`https://argocd.dev.appledore.in`, `https://grafana.dev.appledore.in`,
+`https://prometheus.dev.appledore.in`, and
+`https://alertmanager.dev.appledore.in` for the tools. All five names resolve
+through the CNAMEs in Account A to the public NLB in Account B. The NLB forwards
+TCP ports 80 and 443 to the ingress-nginx NodePorts on the EKS nodes. The
+ingress controller uses the requested hostname to route to the NGINX sample
+app, Argo CD, Grafana, Prometheus, or Alertmanager service in the cluster.
+
+TLS is terminated by ingress-nginx, not by the NLB. Cert-manager obtains and
+renews certificates for the configured hosts from Let's Encrypt using HTTP-01;
+the public DNS records and inbound HTTP port 80 must remain reachable for
+issuance and renewal. The wildcard DNS record does not itself provide a
+wildcard TLS certificate. The sample app is public. Argo CD, Grafana,
+Prometheus, and Alertmanager remain inaccessible until their fail-closed
+`127.0.0.1/32` source allowlists are replaced with the intended trusted public
+egress CIDRs. OTEL ingestion stays cluster-internal because the collector is an
+API endpoint rather than a web UI.
+
+This is a dev-grade, single-cluster setup, not a production-ready platform.
+The admin tools are protected by source-IP allowlists, not SSO; access is
+denied until the placeholder CIDRs are replaced. Tempo is accessed from
+Grafana and is not separately exposed. Review node-group scaling, backups and
+restore procedures, monitoring/alerting, security updates, and a real identity
+provider before production use. High availability and disaster recovery are
+not included in this initial setup.
+
 ## 2. Add QA
 
 Keep dev in place. QA uses a separate VPC, EKS cluster, ECR repositories,
@@ -154,16 +259,21 @@ cp terraform/environments/qa/terraform.tfvars.example \
 
 Set the trusted public IP in `cluster_endpoint_public_access_cidrs`. Replace
 `REPLACE_WITH_DEV_GITHUB_OIDC_PROVIDER_ARN` with the ARN saved from dev, and
-keep `create_github_oidc_provider = false`. Do not commit `terraform.tfvars`.
+keep `create_github_oidc_provider = false`. Set `aws_account_id` to the same
+Account B ID used for dev. Do not commit `terraform.tfvars`.
 
 Create the QA resources:
 
 ```bash
 cd terraform/environments/qa
-terraform init
+terraform init -reconfigure
 terraform plan -out=tfplan
 terraform show tfplan
 ```
+
+QA uses the same bucket at `qa/terraform.tfstate`. As with dev,
+`-reconfigure` does not migrate an existing state from another bucket; stop and
+plan a migration first if QA already has state elsewhere.
 
 Review the account, region, network, and planned QA resources before applying:
 
