@@ -4,7 +4,9 @@ metadata:
   name: ingress-nginx
   namespace: argocd
   annotations:
-    argocd.argoproj.io/sync-wave: "-2"
+    # The ingress-nginx chart creates Services that are admitted by the AWS
+    # Load Balancer Controller webhook, so wait until that controller is ready.
+    argocd.argoproj.io/sync-wave: "0"
 spec:
   project: default
   sources:
