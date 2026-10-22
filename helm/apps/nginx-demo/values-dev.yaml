@@ -2,7 +2,7 @@ replicaCount: 2
 
 image:
   repository: 829647177071.dkr.ecr.eu-central-1.amazonaws.com/eks-platform-demo/dev/nginx-demo
-  tag: "20261015151757"
+  tag: "20261022162446-3307"
   pullPolicy: IfNotPresent
 
 service:

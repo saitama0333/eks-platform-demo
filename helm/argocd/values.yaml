@@ -9,7 +9,7 @@ server:
       - argocd.dev.appledore.in
     annotations:
       cert-manager.io/cluster-issuer: letsencrypt-prod
-      nginx.ingress.kubernetes.io/whitelist-source-range: "127.0.0.1/32"
+      nginx.ingress.kubernetes.io/whitelist-source-range: "58.84.61.197/32"
     tls:
       - secretName: argocd-dev-appledore-tls
         hosts:
