@@ -27,6 +27,10 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+      # kube-prometheus-stack ships CRDs with schemas larger than the
+      # kubectl client-side apply annotation limit. Server-side apply lets
+      # Argo CD install those CRDs before syncing Prometheus/Alertmanager CRs.
+      - ServerSideApply=true
 
 
 
