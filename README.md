@@ -89,6 +89,7 @@ resources. Apply only after reviewing it:
 terraform apply tfplan
 terraform output -raw dev_ingress_nlb_dns_name \
   | tee ../../../dev-ingress-nlb-dns-name.txt
+terraform output -raw vpc_id
 terraform output sample_app_ecr_repositories
 terraform output -raw github_actions_ecr_role_arn
 terraform output -raw github_oidc_provider_arn
@@ -153,6 +154,22 @@ if you want expiry and account notices, add an email address you already
 control to the `email` field in
 `platform/addons/dev/cert-manager-issuer/resources/cluster-issuer.yaml`.
 
+Terraform's `vpc_id` output is the source of truth for the cluster VPC. The AWS
+Load Balancer Controller requires that ID as a top-level `vpcId` in
+`platform/addons/dev/aws-load-balancer-controller/values.yaml`. After applying
+Terraform, get it with:
+
+```bash
+terraform -chdir=terraform/environments/dev output -raw vpc_id
+```
+
+Update the values file if it differs. For QA, use
+`terraform -chdir=terraform/environments/qa output -raw vpc_id` and update
+`platform/addons/qa/aws-load-balancer-controller/values.yaml` instead. These
+values are committed as ordinary per-cluster GitOps configuration; Argo CD
+reads the repository and does not read Terraform state directly. Keep `vpcId`
+at the root of each values file, not under `serviceAccount`.
+
 Commit and push the configuration to `develop`; Argo CD reads that branch:
 
 ```bash
@@ -160,6 +177,7 @@ git add terraform/environments/dev/main.tf terraform/environments/dev/outputs.tf
   terraform/environments/dev/providers.tf terraform/environments/dev/variables.tf \
   terraform/environments/dev/terraform.tfvars.example \
   terraform/environments/qa/providers.tf terraform/environments/qa/variables.tf \
+  terraform/environments/qa/outputs.tf \
   terraform/environments/qa/terraform.tfvars.example \
   terraform/bootstrap/providers.tf terraform/bootstrap/variables.tf \
   terraform/modules/nlb terraform/modules/eks/main.tf \
@@ -167,6 +185,7 @@ git add terraform/environments/dev/main.tf terraform/environments/dev/outputs.tf
   helm/apps/*/values-dev.yaml helm/apps/nginx-demo/templates/ingress.yaml \
   platform/addons/dev/cert-manager \
   platform/addons/dev/cert-manager-issuer \
+  platform/addons/dev/aws-load-balancer-controller \
   platform/addons/dev/ingress-nginx \
   platform/addons/dev/prometheus/values.yaml README.md
 git commit -m "Add dev TLS ingress and tool access"

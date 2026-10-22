@@ -27,3 +27,8 @@ output "dev_ingress_nlb_dns_name" {
   description = "Public DNS name of the dev ingress Network Load Balancer"
   value       = module.ingress_nlb.dns_name
 }
+
+output "vpc_id" {
+  description = "VPC ID for the dev cluster and add-on configuration"
+  value       = module.vpc.vpc_id
+}

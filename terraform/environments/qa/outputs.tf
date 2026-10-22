@@ -22,3 +22,8 @@ output "github_oidc_provider_arn" {
   description = "Account-wide GitHub Actions OIDC provider ARN for reuse by dev"
   value       = module.ecr.github_oidc_provider_arn
 }
+
+output "vpc_id" {
+  description = "VPC ID for the QA cluster and add-on configuration"
+  value       = module.vpc.vpc_id
+}
