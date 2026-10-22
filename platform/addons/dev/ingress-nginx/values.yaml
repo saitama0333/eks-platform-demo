@@ -8,7 +8,8 @@ controller:
     default: true
   service:
     type: NodePort
-    externalTrafficPolicy: Cluster
+    # Preserve the real client IP so Ingress source-range allowlists can match it.
+    externalTrafficPolicy: Local
     nodePorts:
       http: 30080
       https: 30443

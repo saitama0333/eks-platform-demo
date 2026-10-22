@@ -242,6 +242,17 @@ TCP ports 80 and 443 to the ingress-nginx NodePorts on the EKS nodes. The
 ingress controller uses the requested hostname to route to the NGINX sample
 app, Argo CD, Grafana, Prometheus, or Alertmanager service in the cluster.
 
+The Argo CD hostname is `argocd.dev.appledore.in`, exactly as configured in
+`helm/argocd/values.yaml`. `argocd.appledore.in` is a different hostname; a DNS
+record pointing it at the same NLB does not add an Ingress rule or certificate
+for that name. To use the shorter hostname, change the Argo CD Ingress hostname
+and TLS host in `helm/argocd/values.yaml` and create an `argocd` CNAME to the
+NLB in Account A. Argo CD is also restricted by the source-IP allowlist in
+that values file. Update the allowlist to your current trusted public egress
+CIDR if needed. The ingress controller must preserve the client IP for these
+allowlists to work; its Service uses `externalTrafficPolicy: Local`. The sample
+app has no such restriction, so it can work while an admin URL is blocked.
+
 TLS is terminated by ingress-nginx, not by the NLB. Cert-manager obtains and
 renews certificates for the configured hosts from Let's Encrypt using HTTP-01;
 the public DNS records and inbound HTTP port 80 must remain reachable for
@@ -340,6 +351,76 @@ As with dev, ensure QA image values are committed to `develop` before applying
 the root. Argo CD will install the QA add-ons and apps from
 `platform/addons/qa/` and `platform/apps/qa/`.
 
+## Destroy and recreate an environment
+
+Each environment keeps Terraform state in the existing `tf-gitops-nikhil`
+bucket: `dev/terraform.tfstate` or `qa/terraform.tfstate`. Destroying an
+environment does not require deleting that bucket or its state object. Do not
+delete the state object: Terraform needs it to track what it created. Keep the
+ignored local `terraform.tfvars`; it contains the inputs needed for the next
+apply.
+
+Before destroying, account for these resources:
+
+- The ECR repositories use `force_delete = false`. Destroy will fail while
+  they contain images. Keep the repositories and images, or deliberately empty
+  them before destroying the environment.
+- The S3 bucket used for Terraform state and Velero backups is existing and
+  is not created by either environment. It is not deleted by these roots.
+- Dev creates the account-level GitHub OIDC provider used by QA. Destroying
+  dev removes that provider and interrupts GitHub Actions role assumption for
+  QA until dev is applied again. Reapply dev before running QA image publishing.
+
+For dev, authenticate to Account B and destroy from the dev Terraform root:
+
+```bash
+aws sso login --profile sandbox3
+export AWS_PROFILE=sandbox3
+terraform -chdir=terraform/environments/dev init -reconfigure
+terraform -chdir=terraform/environments/dev plan -destroy -out=destroy.tfplan
+terraform -chdir=terraform/environments/dev show destroy.tfplan
+terraform -chdir=terraform/environments/dev apply destroy.tfplan
+```
+
+Use `terraform/environments/qa` for QA. Review the plan to confirm it targets
+only the intended environment and Account B before applying it. Recreate with
+the existing local inputs:
+
+```bash
+terraform -chdir=terraform/environments/dev init -reconfigure
+terraform -chdir=terraform/environments/dev plan -out=tfplan
+terraform -chdir=terraform/environments/dev show tfplan
+terraform -chdir=terraform/environments/dev apply tfplan
+```
+
+Keep `aws_account_id`, region, cluster version, and VPC/subnet CIDRs consistent
+with the intended setup. Change `cluster_endpoint_public_access_cidrs` in local
+`terraform.tfvars` if your trusted public/VPN egress IP changed; use a CIDR
+such as `x.x.x.x/32`, never `0.0.0.0/0`. Change VPC/subnet CIDRs only if they
+overlap another connected network. QA must keep
+`create_github_oidc_provider = false` and use the provider ARN output from dev.
+
+After apply, get generated values instead of guessing them:
+
+```bash
+terraform -chdir=terraform/environments/dev output -raw vpc_id
+terraform -chdir=terraform/environments/dev output -raw dev_ingress_nlb_dns_name
+terraform -chdir=terraform/environments/dev output -raw github_oidc_provider_arn
+terraform -chdir=terraform/environments/dev output -raw github_actions_ecr_role_arn
+terraform -chdir=terraform/environments/dev output sample_app_ecr_repositories
+```
+
+If the VPC was recreated, update the top-level `vpcId` in
+`platform/addons/dev/aws-load-balancer-controller/values.yaml`. If the NLB DNS
+name changed, update the `dev` and `*.dev` CNAME records in Account A's
+authoritative Route 53 zone. If your public egress IP changed, update the EKS
+API CIDR in local `terraform.tfvars` and the admin Ingress allowlists in
+`helm/argocd/values.yaml` and `platform/addons/dev/prometheus/values.yaml`.
+Keep those allowlists restricted to trusted IPs. App image values only need
+updating if the AWS account or ECR repository URLs changed. Commit and push
+changed GitOps values to `develop`; Argo CD does not read Terraform outputs
+directly. Repeat with QA outputs and QA values when recreating QA.
+
 ## GitHub Actions image publishing
 
 The repository has a **GitHub Actions** workflow at
@@ -398,10 +479,56 @@ kubectl --context dev -n argocd port-forward svc/argocd-server 8443:443
 Then open `https://localhost:8443`. Keep the port-forward command running while
 using the browser.
 
+The Argo CD CLI can inspect and control an Application after `argocd login`:
+
+```bash
+argocd app get kube-prometheus-stack
+argocd app terminate-op kube-prometheus-stack
+argocd app get kube-prometheus-stack
+argocd app sync kube-prometheus-stack
+```
+
+Terminate a stuck operation, confirm it is no longer `Running`, then sync it
+again. Replace `kube-prometheus-stack` with the Application name shown by
+`kubectl --context dev -n argocd get applications`.
+
+For UI failures, check the response and the matching layer: `403` usually means
+the Ingress source-IP allowlist rejected the request; `503` means the backend
+Service has no ready endpoints. Check the current rules and endpoints with:
+
+```bash
+kubectl --context dev get ingress -A -o wide
+kubectl --context dev -n monitoring get pods,svc,endpoints
+kubectl --context dev get certificates -A
+```
+
+Wait for Grafana's certificate to become `Ready` before relying on browser TLS.
+Let's Encrypt HTTP-01 validation needs public port 80 to reach the ingress
+controller during issuance and renewal.
+
 Prometheus, Grafana, Alertmanager, Tempo, and the Python demo use encrypted
 gp3 persistent volumes. They survive pod restarts, but this setup does not
 back up monitoring data or EBS volumes. The Velero schedule covers workloads
 in the `default` namespace only.
+
+## External Secrets sample
+
+`platform/secrets/dev/demo-app-secret.yaml` tells External Secrets to read the
+AWS Secrets Manager secret named `eks-platform-demo/dev/demo-app` in
+`eu-central-1`, then copy its `username` and `password` properties into the
+Kubernetes Secret `default/demo-app-secret`. The manifest does not create the
+AWS secret or invent its values. A `Ready` ClusterSecretStore means the
+controller can connect to AWS; it does not verify that the requested secret
+name and JSON properties exist.
+
+If you want this sample secret, create it in AWS Account B's Secrets Manager
+in `eu-central-1` as a JSON secret with `username` and `password` keys. Keep
+the actual values in Secrets Manager; never commit them to this repository.
+QA uses `eks-platform-demo/qa/demo-app`. The ExternalSecret app remains
+Degraded until its referenced AWS secret is supplied. No current workload in
+this repository references `default/demo-app-secret`; if you do not plan to
+use this sample, remove its ExternalSecret manifest from GitOps instead of
+creating credentials that nothing uses.
 
 ## Bash aliases
 
