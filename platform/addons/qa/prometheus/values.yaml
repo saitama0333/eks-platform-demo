@@ -1,5 +1,9 @@
 grafana:
   enabled: true
+  # The Grafana PVC is ReadWriteOnce. Stop the old pod before attaching it
+  # to a replacement during upgrades and node rollouts.
+  deploymentStrategy:
+    type: Recreate
   persistence:
     enabled: true
     type: pvc

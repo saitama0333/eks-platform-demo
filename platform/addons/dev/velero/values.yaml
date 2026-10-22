@@ -2,6 +2,12 @@ serviceAccount:
   server:
     create: true
     name: velero
+kubectl:
+  image:
+    # The chart's default derives the unavailable tag "1.33". Pin kubectl
+    # to the running EKS minor/patch instead.
+    repository: docker.io/alpine/k8s
+    tag: 1.33.13
 credentials:
   useSecret: false
 configuration:
