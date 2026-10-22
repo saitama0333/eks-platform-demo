@@ -4,6 +4,16 @@ variable "aws_region" {
   default     = "eu-central-1"
 }
 
+variable "aws_account_id" {
+  description = "12-digit AWS account ID that must own the QA resources"
+  type        = string
+
+  validation {
+    condition     = can(regex("^[0-9]{12}$", var.aws_account_id))
+    error_message = "Set aws_account_id to the 12-digit ID of the target AWS account."
+  }
+}
+
 variable "project_name" {
   description = "Project name"
   type        = string
@@ -37,7 +47,7 @@ variable "create_github_oidc_provider" {
 variable "velero_bucket_name" {
   description = "Existing S3 bucket shared with Terraform state"
   type        = string
-  default     = "appledore-gitops"
+  default     = "tf-gitops-nikhil"
 }
 
 variable "velero_prefix" {

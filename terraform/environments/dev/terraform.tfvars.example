@@ -1,5 +1,6 @@
 # Copy to terraform.tfvars and replace the public API CIDR with your current
 # workstation/VPN public egress IP in CIDR notation (usually x.x.x.x/32).
+aws_account_id                        = "829647177071"
 cluster_endpoint_public_access_cidrs = ["REPLACE_WITH_YOUR_PUBLIC_IP/32"]
 velero_bucket_name                   = "tf-gitops-nikhil"
 velero_prefix                        = "backup/dev"
