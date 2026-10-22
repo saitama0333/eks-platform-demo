@@ -200,8 +200,7 @@ method below instead. Do not publish the same app/tag using both methods.
 Connect `kubectl` to the dev cluster:
 
 ```bash
-aws eks update-kubeconfig --region eu-central-1 \
-  --name eks-platform-demo-dev --alias dev
+aws eks update-kubeconfig --region eu-central-1  --name eks-platform-demo-dev --alias dev
 kubectl config use-context dev
 ```
 
