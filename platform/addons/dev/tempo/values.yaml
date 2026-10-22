@@ -1,3 +1,5 @@
+# Temporary overnight scale-down; restore to 1 before bringing dev back online.
+replicas: 0
 tempo:
   reportingEnabled: false
   receivers:

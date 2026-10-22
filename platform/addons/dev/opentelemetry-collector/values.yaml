@@ -1,5 +1,6 @@
 mode: deployment
-replicaCount: 1
+# Temporary overnight scale-down; restore to 1 before bringing dev back online.
+replicaCount: 0
 image:
   repository: otel/opentelemetry-collector-contrib
 service:
