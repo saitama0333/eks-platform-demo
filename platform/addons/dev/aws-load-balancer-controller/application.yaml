@@ -14,11 +14,6 @@ spec:
       jsonPointers:
         - /data
     - group: admissionregistration.k8s.io
-      kind: MutatingWebhookConfiguration
-      name: aws-load-balancer-webhook
-      jqPathExpressions:
-        - .webhooks[].clientConfig.caBundle
-    - group: admissionregistration.k8s.io
       kind: ValidatingWebhookConfiguration
       name: aws-load-balancer-webhook
       jqPathExpressions:
