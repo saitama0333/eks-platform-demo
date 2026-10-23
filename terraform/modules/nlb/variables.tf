@@ -18,6 +18,12 @@ variable "autoscaling_group_name" {
   type        = string
 }
 
+variable "attach_to_asg" {
+  description = "Whether to attach the NLB target groups to the EKS node group Auto Scaling Group"
+  type        = bool
+  default     = true
+}
+
 variable "tags" {
   description = "Tags applied to the NLB resources"
   type        = map(string)

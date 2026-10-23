@@ -101,11 +101,13 @@ resource "aws_lb_listener" "https" {
 }
 
 resource "aws_autoscaling_attachment" "http" {
+  count                  = var.attach_to_asg ? 1 : 0
   autoscaling_group_name = var.autoscaling_group_name
   lb_target_group_arn    = aws_lb_target_group.http.arn
 }
 
 resource "aws_autoscaling_attachment" "https" {
+  count                  = var.attach_to_asg ? 1 : 0
   autoscaling_group_name = var.autoscaling_group_name
   lb_target_group_arn    = aws_lb_target_group.https.arn
 }

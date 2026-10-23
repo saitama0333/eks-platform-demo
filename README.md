@@ -375,7 +375,7 @@ For dev, authenticate to Account B and destroy from the dev Terraform root:
 
 ```bash
 aws sso login --profile sandbox3
-export AWS_PROFILE=sandbox3
+
 terraform -chdir=terraform/environments/dev init -reconfigure
 terraform -chdir=terraform/environments/dev plan -destroy -out=destroy.tfplan
 terraform -chdir=terraform/environments/dev show destroy.tfplan

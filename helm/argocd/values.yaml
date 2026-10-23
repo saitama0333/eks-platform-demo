@@ -6,7 +6,7 @@ server:
     hostname: argocd.dev.appledore.in
     annotations:
       cert-manager.io/cluster-issuer: letsencrypt-prod
-      nginx.ingress.kubernetes.io/whitelist-source-range: "58.84.61.197/32"
+      nginx.ingress.kubernetes.io/whitelist-source-range: "58.84.62.245/32"
       nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
     extraTls:
       - hosts:

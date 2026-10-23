@@ -54,7 +54,8 @@ module "ingress_nlb" {
   name                   = "${var.project_name}-${var.environment}"
   vpc_id                 = module.vpc.vpc_id
   public_subnet_ids      = module.vpc.public_subnet_ids
-  autoscaling_group_name = module.eks.managed_node_group_autoscaling_group_names[0]
+  autoscaling_group_name = try(module.eks.managed_node_group_autoscaling_group_names[0], "")
+  attach_to_asg           = true
 
   tags = {
     Project     = var.project_name

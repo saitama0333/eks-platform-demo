@@ -11,7 +11,7 @@ grafana:
     ingressClassName: nginx
     annotations:
       cert-manager.io/cluster-issuer: letsencrypt-prod
-      nginx.ingress.kubernetes.io/whitelist-source-range: "58.84.61.197/32"
+      nginx.ingress.kubernetes.io/whitelist-source-range: "58.84.62.245/32"
     hosts:
       - grafana.dev.appledore.in
     tls:
@@ -37,7 +37,7 @@ prometheus:
     ingressClassName: nginx
     annotations:
       cert-manager.io/cluster-issuer: letsencrypt-prod
-      nginx.ingress.kubernetes.io/whitelist-source-range: "58.84.61.197/32"
+      nginx.ingress.kubernetes.io/whitelist-source-range: "58.84.62.245/32"
     hosts:
       - prometheus.dev.appledore.in
     tls:
@@ -65,7 +65,7 @@ alertmanager:
     ingressClassName: nginx
     annotations:
       cert-manager.io/cluster-issuer: letsencrypt-prod
-      nginx.ingress.kubernetes.io/whitelist-source-range: "58.84.61.197/32"
+      nginx.ingress.kubernetes.io/whitelist-source-range: "58.84.62.245/32"
     hosts:
       - alertmanager.dev.appledore.in
     tls:
