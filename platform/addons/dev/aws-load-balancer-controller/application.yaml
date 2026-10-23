@@ -7,6 +7,22 @@ metadata:
     argocd.argoproj.io/sync-wave: "-1"
 spec:
   project: default
+  ignoreDifferences:
+    - kind: Secret
+      name: aws-load-balancer-tls
+      namespace: kube-system
+      jsonPointers:
+        - /data
+    - group: admissionregistration.k8s.io
+      kind: MutatingWebhookConfiguration
+      name: aws-load-balancer-webhook
+      jqPathExpressions:
+        - .webhooks[].clientConfig.caBundle
+    - group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration
+      name: aws-load-balancer-webhook
+      jqPathExpressions:
+        - .webhooks[].clientConfig.caBundle
   sources:
     - repoURL: https://aws.github.io/eks-charts
       chart: aws-load-balancer-controller
@@ -27,6 +43,7 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+      - RespectIgnoreDifferences=true
 
 
 

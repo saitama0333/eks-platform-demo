@@ -555,6 +555,7 @@ alias pfstopqa='bash scripts/port-forward.sh qa stop'
 
 alias gs='git status --short'
 alias gd='git diff'
+alias gpo='git push origin'
 ```
 
 For example, after adding these aliases, `tfdev plan` runs Terraform from the
