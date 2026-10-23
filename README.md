@@ -224,7 +224,7 @@ values. Chart `10.10.5` packages Argo CD `v3.5.5`:
 ```bash
 helm repo add argo https://argoproj.github.io/argo-helm --force-update
 helm repo update
-helm upgrade --install argocd argo/argo-cd --version 10.10.5 --namespace argocd --create-namespace --wait --kube-context dev --values helm/argocd/values.yaml
+helm upgrade --install argocd argo/argo-cd --version 10.10.5 --namespace argocd --create-namespace --wait --kube-context dev --values helm/argocd/values.yaml --set server.ingress.enabled=false
 ```
 
 This Helm release runs Argo CD in the cluster, including the server,
@@ -243,7 +243,9 @@ kubectl --context dev get pods -A
 The root discovers the dev Applications under `platform/addons/dev/` and
 `platform/apps/dev/`. Argo CD then installs the pinned add-on charts and app
 charts from Git. Do not manually run Helm installs for add-ons managed by
-Argo CD.
+Argo CD. The initial Argo CD install keeps its public Ingress disabled so
+cert-manager cannot start HTTP-01 issuance before ingress-nginx and its
+`nginx` IngressClass have been installed.
 
 The AWS Load Balancer Controller configuration disables its Service mutator
 webhook because this platform uses a Terraform-managed NLB and ingress-nginx
@@ -263,6 +265,26 @@ If Argo CD is waiting for the DaemonSet after a Service admission error, fix
 the AWS controller sync first, terminate the stale ingress-nginx operation,
 and start a fresh sync. A sync waiting on an unhealthy DaemonSet may remain
 `Running`; it does not mean the Service was created.
+
+Before enabling the Argo CD Ingress, confirm these prerequisites are ready:
+
+```bash
+kubectl --context dev get ingressclass nginx
+kubectl --context dev get clusterissuer letsencrypt-prod
+kubectl --context dev -n ingress-nginx get svc ingress-nginx-controller-admission
+```
+
+Then enable Argo CD's configured Ingress and TLS host:
+
+```bash
+helm upgrade argocd argo/argo-cd --version 10.10.5 --namespace argocd --wait --kube-context dev --values helm/argocd/values.yaml
+```
+
+This ordering ensures cert-manager's HTTP-01 solver can create its temporary
+Ingress after the `nginx` class and ingress-nginx admission Service exist. If
+an older certificate Order is still pending after a failed presentation,
+delete that Order to make cert-manager create a fresh one; do not delete the
+Certificate or TLS Secret manually.
 
 Once DNS resolves, open `https://dev.appledore.in` for the sample app and
 `https://argocd.dev.appledore.in`, `https://grafana.dev.appledore.in`,
