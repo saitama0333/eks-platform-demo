@@ -1,4 +1,4 @@
-replicaCount: 0
+replicaCount: 2
 
 image:
   repository: 829647177071.dkr.ecr.eu-central-1.amazonaws.com/eks-platform-demo/dev/nginx-demo
