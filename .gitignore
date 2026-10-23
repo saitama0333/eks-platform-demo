@@ -10,6 +10,7 @@ override.tf
 override.tf.json
 *_override.tf
 *_override.tf.json
+dev-ingress-nlb-dns-name.txt
 
 # Terraform plan
 *.tfplan

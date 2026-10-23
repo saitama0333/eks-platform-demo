@@ -210,9 +210,7 @@ values. Chart `10.10.5` packages Argo CD `v3.5.5`:
 ```bash
 helm repo add argo https://argoproj.github.io/argo-helm --force-update
 helm repo update
-helm upgrade --install argocd argo/argo-cd --version 10.10.5 \
-  --namespace argocd --create-namespace --wait --kube-context dev \
-  --values helm/argocd/values.yaml
+helm upgrade --install argocd argo/argo-cd --version 10.10.5 --namespace argocd --create-namespace --wait --kube-context dev --values helm/argocd/values.yaml
 ```
 
 This Helm release runs Argo CD in the cluster, including the server,
