@@ -96,6 +96,21 @@ terraform output -raw github_oidc_provider_arn
 cd ../../..
 ```
 
+Keep the AWS SSO session valid through the full apply. Afterward, verify the
+cluster add-ons and nodes before installing Argo CD:
+
+```bash
+aws eks list-addons --cluster-name eks-platform-demo-dev --region eu-central-1
+aws eks list-nodegroups --cluster-name eks-platform-demo-dev --region eu-central-1
+kubectl --context dev get nodes -o wide
+```
+
+The add-on list should include `vpc-cni`, `coredns`, and `kube-proxy`, and
+nodes should be `Ready`. If Terraform reports `ExpiredToken` or says it wrote
+`errored.tfstate`, stop before another apply. Renew credentials and compare
+`terraform state pull` with the errored state; only push a recovery state if it
+is newer and verified. Never delete the S3 backend state.
+
 Terraform creates the ECR repositories and the public dev ingress NLB, but it
 does not build or push app images. The command also saves the NLB DNS name to
 `dev-ingress-nlb-dns-name.txt` in the repository root. Verify the AWS account
@@ -142,13 +157,12 @@ the changes:
 git diff -- helm/apps
 ```
 
-Before pushing the ingress configuration, replace the fail-closed
-`127.0.0.1/32` source-range annotations in `helm/argocd/values.yaml` and
-`platform/addons/dev/prometheus/values.yaml` with the public egress CIDRs
-allowed to access the admin tools. You can use the trusted workstation/VPN
-egress CIDRs configured for the EKS API. Do not replace them with
-`0.0.0.0/0`. The sample app at `dev.appledore.in` stays public; Argo CD,
-Grafana, Prometheus, and Alertmanager are restricted to those CIDRs.
+Before pushing ingress configuration, set the source-range annotations in
+`helm/argocd/values.yaml` and `platform/addons/dev/prometheus/values.yaml` to
+trusted public/VPN egress CIDRs for admin access. Keep them aligned with the
+EKS API CIDR where practical; never use `0.0.0.0/0`. The sample app at
+`dev.appledore.in` stays public; Argo CD, Grafana, Prometheus, and Alertmanager
+are restricted to those CIDRs.
 The ACME contact email is optional. No paid `appledore.in` mailbox is needed:
 if you want expiry and account notices, add an email address you already
 control to the `email` field in
@@ -231,6 +245,25 @@ The root discovers the dev Applications under `platform/addons/dev/` and
 charts from Git. Do not manually run Helm installs for add-ons managed by
 Argo CD.
 
+The AWS Load Balancer Controller configuration disables its Service mutator
+webhook because this platform uses a Terraform-managed NLB and ingress-nginx
+`NodePort` Services. Keep `enableServiceMutatorWebhook: false` in
+`platform/addons/dev/aws-load-balancer-controller/values.yaml`.
+
+Before testing public URLs, verify ingress-nginx has a ready NodePort Service
+and controller pods:
+
+```bash
+kubectl --context dev -n ingress-nginx get svc,daemonset,pods -o wide
+```
+
+Expect the controller Service to expose `80:30080` and `443:30443`, with all
+desired DaemonSet pods ready. Then confirm both NLB target groups are healthy.
+If Argo CD is waiting for the DaemonSet after a Service admission error, fix
+the AWS controller sync first, terminate the stale ingress-nginx operation,
+and start a fresh sync. A sync waiting on an unhealthy DaemonSet may remain
+`Running`; it does not mean the Service was created.
+
 Once DNS resolves, open `https://dev.appledore.in` for the sample app and
 `https://argocd.dev.appledore.in`, `https://grafana.dev.appledore.in`,
 `https://prometheus.dev.appledore.in`, and
@@ -256,14 +289,13 @@ renews certificates for the configured hosts from Let's Encrypt using HTTP-01;
 the public DNS records and inbound HTTP port 80 must remain reachable for
 issuance and renewal. The wildcard DNS record does not itself provide a
 wildcard TLS certificate. The sample app is public. Argo CD, Grafana,
-Prometheus, and Alertmanager remain inaccessible until their fail-closed
-`127.0.0.1/32` source allowlists are replaced with the intended trusted public
-egress CIDRs. OTEL ingestion stays cluster-internal because the collector is an
-API endpoint rather than a web UI.
+Prometheus, and Alertmanager are restricted by the trusted source CIDRs
+configured in their values files. Keep those CIDRs current. OTEL ingestion
+stays cluster-internal because the collector is an API endpoint rather than a
+web UI.
 
 This is a dev-grade, single-cluster setup, not a production-ready platform.
-The admin tools are protected by source-IP allowlists, not SSO; access is
-denied until the placeholder CIDRs are replaced. Tempo is accessed from
+The admin tools are protected by source-IP allowlists, not SSO. Tempo is accessed from
 Grafana and is not separately exposed. Review node-group scaling, backups and
 restore procedures, monitoring/alerting, security updates, and a real identity
 provider before production use. High availability and disaster recovery are
