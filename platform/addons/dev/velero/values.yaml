@@ -2,12 +2,12 @@ serviceAccount:
   server:
     create: true
     name: velero
-kubectl:
-  image:
-    # The chart's default derives the unavailable tag "1.33". Pin kubectl
-    # to the running EKS minor/patch instead.
-    repository: docker.io/alpine/k8s
-    tag: 1.33.13
+# Argo CD renders and applies the chart's CRDs directly. Disable the optional
+# pre-install/pre-upgrade hook: it copies /bin/sh and kubectl from a separate
+# image into the Velero image, which is not a compatible runtime assumption.
+# Review and apply CRD changes explicitly when upgrading the Velero chart.
+upgradeCRDs: false
+
 credentials:
   useSecret: false
 configuration:

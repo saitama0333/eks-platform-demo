@@ -1,5 +1,11 @@
 grafana:
   enabled: true
+  # kube-prometheus-stack ships Kubernetes-mixin dashboards as ConfigMaps.
+  defaultDashboardsEnabled: true
+  sidecar:
+    dashboards:
+      enabled: true
+      searchNamespace: ALL
   # Temporary overnight scale-down; restore to 1 before bringing dev back online.
   replicas: 1
   # The Grafana PVC is ReadWriteOnce. Stop the old pod before attaching it
@@ -84,3 +90,13 @@ alertmanager:
           resources:
             requests:
               storage: 5Gi
+
+# Keep the chart's Kubernetes-mixin recording and alert rules enabled.
+defaultRules:
+  create: true
+
+kubeStateMetrics:
+  enabled: true
+
+prometheus-node-exporter:
+  enabled: true

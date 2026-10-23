@@ -316,6 +316,26 @@ configured in their values files. Keep those CIDRs current. OTEL ingestion
 stays cluster-internal because the collector is an API endpoint rather than a
 web UI.
 
+The kube-prometheus-stack chart includes Kubernetes-mixin recording rules,
+alert rules, and Grafana dashboards. The dev values explicitly keep those
+enabled and allow Grafana's dashboard sidecar to discover dashboard ConfigMaps.
+In Grafana, open **Dashboards** and look for the Kubernetes dashboards. In
+Prometheus, check **Status → Targets** and **Alerts**. An empty firing-alert
+list can be normal when no alert condition is active; configured rule groups
+are visible separately in Prometheus under **Alerts**. To inspect what Argo
+CD installed:
+
+```bash
+kubectl --context dev -n monitoring get prometheusrules
+kubectl --context dev -n monitoring get configmaps -l grafana_dashboard=1
+```
+
+If these resources exist but Grafana has no Kubernetes dashboards, check the
+Grafana dashboard sidecar logs and confirm the Prometheus data source is
+healthy. If Prometheus dashboards show no data, check **Status → Targets** for
+scrape failures before importing more dashboards; adding a second copy of the
+Kubernetes mixin can create duplicate rules and dashboards.
+
 This is a dev-grade, single-cluster setup, not a production-ready platform.
 The admin tools are protected by source-IP allowlists, not SSO. Tempo is accessed from
 Grafana and is not separately exposed. Review node-group scaling, backups and
