@@ -4,3 +4,6 @@ serviceAccount:
   create: true
   name: aws-load-balancer-controller
 vpcId: vpc-00bbcfd57064a4763
+# The NLB is managed by Terraform and ingress-nginx uses NodePort, so the
+# controller's Service LoadBalancer mutating webhook is not needed.
+enableServiceMutatorWebhook: false
