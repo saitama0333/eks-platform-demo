@@ -47,7 +47,6 @@ module "karpenter" {
     ManagedBy   = "Terraform"
   }
 
-  depends_on = [module.eks]
 }
 
 module "ingress_nlb" {

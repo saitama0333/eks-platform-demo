@@ -14,7 +14,6 @@ module "platform_aws" {
     ManagedBy   = "Terraform"
   }
 
-  depends_on = [module.eks]
 }
 
 module "ecr" {
