@@ -11,8 +11,6 @@ spec:
     repoURL: https://github.com/saitama0333/eks-platform-demo.git
     targetRevision: develop
     path: platform/karpenter/dev
-    directory:
-      recurse: false
   destination:
     server: https://kubernetes.default.svc
     namespace: kube-system
