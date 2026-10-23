@@ -3,4 +3,4 @@ region: eu-central-1
 serviceAccount:
   create: true
   name: aws-load-balancer-controller
-vpcId: vpc-02b0f0fa1f71eb56a
+vpcId: vpc-00bbcfd57064a4763
