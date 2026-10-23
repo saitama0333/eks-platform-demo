@@ -2,6 +2,8 @@ serviceAccount:
   server:
     create: true
     name: velero
+# Pause Velero while dev is idle. Scheduled backups will not run until resumed.
+replicas: 0
 # Argo CD renders and applies the chart's CRDs directly. Disable the optional
 # pre-install/pre-upgrade hook: it copies /bin/sh and kubectl from a separate
 # image into the Velero image, which is not a compatible runtime assumption.
@@ -21,7 +23,7 @@ configuration:
   volumeSnapshotLocation: []
   uploaderType: kopia
 snapshotsEnabled: false
-deployNodeAgent: true
+deployNodeAgent: false
 initContainers:
   - name: velero-plugin-for-aws
     image: velero/velero-plugin-for-aws:v1.10.0

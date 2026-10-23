@@ -6,8 +6,8 @@ grafana:
     dashboards:
       enabled: true
       searchNamespace: ALL
-  # Temporary overnight scale-down; restore to 1 before bringing dev back online.
-  replicas: 1
+  # Set to zero while dev is paused; the PVC is retained.
+  replicas: 0
   # The Grafana PVC is ReadWriteOnce. Stop the old pod before attaching it
   # to a replacement during upgrades and node rollouts.
   deploymentStrategy:
@@ -51,8 +51,8 @@ prometheus:
         hosts:
           - prometheus.dev.appledore.in
   prometheusSpec:
-    # Temporary overnight scale-down; Prometheus PVC is retained.
-    replicas: 1
+    # Set to zero while dev is paused; the PVC is retained.
+    replicas: 0
     retention: 7d
     retentionSize: 18GB
     storageSpec:
@@ -79,8 +79,8 @@ alertmanager:
         hosts:
           - alertmanager.dev.appledore.in
   alertmanagerSpec:
-    # Temporary overnight scale-down; Alertmanager PVC is retained.
-    replicas: 1
+    # Set to zero while dev is paused; the PVC is retained.
+    replicas: 0
     storage:
       volumeClaimTemplate:
         spec:

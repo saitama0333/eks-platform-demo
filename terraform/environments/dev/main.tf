@@ -26,9 +26,11 @@ module "eks" {
 
   node_instance_types = var.node_instance_types
 
-  node_min_size     = var.node_min_size
+  # Pause the dev worker ASG while the environment is idle. Revert this pause
+  # change to restore the configured node_min_size and node_desired_size.
+  node_min_size     = 0
   node_max_size     = var.node_max_size
-  node_desired_size = var.node_desired_size
+  node_desired_size = 0
   node_disk_size    = var.node_disk_size
 }
 

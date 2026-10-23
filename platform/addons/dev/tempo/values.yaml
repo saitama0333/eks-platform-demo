@@ -1,5 +1,5 @@
-# Temporary overnight scale-down; restore to 1 before bringing dev back online.
-replicas: 1
+# Pause the Tempo server while dev is idle. Its PVC is retained.
+replicas: 0
 tempo:
   reportingEnabled: false
   receivers:
