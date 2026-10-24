@@ -1,0 +1,48 @@
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: kagent-openai
+  namespace: kagent
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: aws-secrets-manager
+    kind: ClusterSecretStore
+  target:
+    name: kagent-openai
+    creationPolicy: Owner
+  data:
+    - secretKey: OPENAI_API_KEY
+      remoteRef:
+        key: eks-platform-demo/dev/kagent-openai
+        property: OPENAI_API_KEY
+---
+apiVersion: kagent.dev/v1alpha2
+kind: Agent
+metadata:
+  name: dev-troubleshooter
+  namespace: kagent
+spec:
+  type: Declarative
+  description: Read-only helper for investigating dev Kubernetes issues.
+  declarative:
+    modelConfig: default-model-config
+    stream: true
+    systemMessage: |
+      You are a read-only troubleshooting assistant for the eks-platform-demo dev cluster.
+      Use only the Kubernetes inspection tools provided to you. Never claim you changed
+      anything. Do not ask for credentials or secret values. Do not suggest running
+      destructive commands. Explain what you observed, separate facts from likely causes,
+      and suggest safe next checks. Any actual fix must be reviewed by a person and made
+      through Git and Argo CD.
+    tools:
+      - type: McpServer
+        mcpServer:
+          apiGroup: kagent.dev
+          name: kagent-tool-server
+          kind: RemoteMCPServer
+          toolNames:
+            - k8s_get_resources
+            - k8s_describe_resource
+            - k8s_get_pod_logs
+            - k8s_get_events

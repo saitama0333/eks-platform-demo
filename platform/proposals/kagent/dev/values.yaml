@@ -1,0 +1,81 @@
+# Dev evaluation only. Keep the UI private and use kubectl port-forward.
+controller:
+  replicas: 1
+  auth:
+    mode: unsecure
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+database:
+  postgres:
+    bundled:
+      enabled: true
+
+providers:
+  default: openAI
+  openAI:
+    provider: OpenAI
+    model: gpt-4.1-mini
+    apiKeySecretRef: kagent-openai
+    apiKeySecretKey: OPENAI_API_KEY
+
+kagent-tools:
+  enabled: true
+  replicaCount: 1
+  tools:
+    enabledTools:
+      - k8s
+    args:
+      - --read-only
+  rbac:
+    create: true
+    readOnly: true
+    allowSecrets: false
+    namespaces:
+      - argocd
+      - default
+      - ingress-nginx
+      - monitoring
+    additionalRules:
+      - apiGroups:
+          - argoproj.io
+        resources:
+          - applications
+          - applicationsets
+        verbs:
+          - get
+          - list
+          - watch
+
+substrate:
+  enabled: false
+kmcp:
+  enabled: false
+
+k8s-agent:
+  enabled: false
+kgateway-agent:
+  enabled: false
+istio-agent:
+  enabled: false
+promql-agent:
+  enabled: false
+observability-agent:
+  enabled: false
+argo-rollouts-agent:
+  enabled: false
+helm-agent:
+  enabled: false
+cilium-policy-agent:
+  enabled: false
+cilium-manager-agent:
+  enabled: false
+cilium-debug-agent:
+  enabled: false
+grafana-mcp:
+  enabled: false

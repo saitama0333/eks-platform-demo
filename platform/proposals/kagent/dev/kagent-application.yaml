@@ -1,0 +1,24 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kagent
+  namespace: argocd
+spec:
+  project: default
+  sources:
+    - repoURL: ghcr.io/kagent-dev/kagent/helm
+      chart: kagent
+      targetRevision: 0.10.3
+      helm:
+        releaseName: kagent
+        valueFiles:
+          - $values/platform/proposals/kagent/dev/values.yaml
+    - repoURL: https://github.com/saitama0333/eks-platform-demo.git
+      targetRevision: develop
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kagent
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
