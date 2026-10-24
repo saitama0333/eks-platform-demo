@@ -31,7 +31,7 @@ GIT_PATHS=(
 fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || fail "Required command not found: $1"; }
 
-for tool in git aws kubectl python; do need "$tool"; done
+for tool in git aws kubectl powershell.exe cygpath; do need "$tool"; done
 [[ -f "$TFVARS" ]] || fail "Missing $TFVARS. Copy terraform.tfvars.example and configure it first."
 [[ ! -e "$STATE_FILE" ]] || fail "Pause state already exists at $STATE_FILE. Use scripts/resume-dev.sh first."
 [[ "$(git branch --show-current)" == "$BRANCH" ]] || fail "Switch to branch $BRANCH before pausing."
@@ -43,34 +43,43 @@ if [[ -n "$(git status --porcelain -- "${GIT_PATHS[@]}")" ]]; then
   fail "Pause target files have local changes. Commit/push those changes first so the pause commit only contains the scale-down."
 fi
 
+run_powershell() {
+  local script_path script_win status
+  script_path="$(mktemp --suffix=.ps1)"
+  cat > "$script_path"
+  script_win="$(cygpath -w "$script_path")"
+  powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$script_win" "$@"
+  status=$?
+  rm -f "$script_path"
+  return "$status"
+}
+
 read_tfvar() {
-  python - "$TFVARS" "$1" <<'PY'
-import re, sys
-from pathlib import Path
-text = Path(sys.argv[1]).read_text(encoding="utf-8")
-key = re.escape(sys.argv[2])
-found = re.findall(rf"(?m)^\s*{key}\s*=\s*(\d+)\s*$", text)
-if len(found) != 1:
-    raise SystemExit(f"Expected one numeric {sys.argv[2]} in terraform.tfvars")
-print(found[0])
-PY
+  run_powershell "$(cygpath -w "$TFVARS")" "$1" <<'POWERSHELL'
+$ErrorActionPreference = 'Stop'
+$path, $key = $args
+$text = [System.IO.File]::ReadAllText($path)
+$matches = [regex]::Matches($text, "(?m)^\s*$([regex]::Escape($key))\s*=\s*(\d+)\s*$")
+if ($matches.Count -ne 1) { throw "Expected one numeric $key in terraform.tfvars" }
+Write-Output $matches[0].Groups[1].Value
+POWERSHELL
 }
 
 set_tfvar() {
-  python - "$TFVARS" "$1" "$2" <<'PY'
-import re, sys
-from pathlib import Path
-path = Path(sys.argv[1])
-raw = path.read_bytes()
-newline = b"\r\n" if b"\r\n" in raw else b"\n"
-text = raw.decode("utf-8").replace("\r\n", "\n")
-key, value = sys.argv[2], sys.argv[3]
-pattern = rf"(?m)^{re.escape(key)}\s*=\s*\d+\s*$"
-updated, count = re.subn(pattern, f"{key} = {value}", text)
-if count != 1:
-    raise SystemExit(f"Expected one {key} setting in terraform.tfvars; found {count}")
-path.write_bytes(updated.replace("\n", newline.decode()).encode("utf-8"))
-PY
+  run_powershell "$(cygpath -w "$TFVARS")" "$1" "$2" <<'POWERSHELL'
+$ErrorActionPreference = 'Stop'
+$path, $key, $value = $args
+$raw = [System.IO.File]::ReadAllBytes($path)
+$text = [System.Text.Encoding]::UTF8.GetString($raw)
+$newline = if ($text.Contains("`r`n")) { "`r`n" } else { "`n" }
+$normalized = $text.Replace("`r`n", "`n")
+$pattern = "(?m)^$([regex]::Escape($key))\s*=\s*\d+\s*$"
+$updated = [regex]::Replace($normalized, $pattern, "$key = $value", [System.Text.RegularExpressions.RegexOptions]::None)
+$count = [regex]::Matches($normalized, $pattern).Count
+if ($count -ne 1) { throw "Expected one $key setting in terraform.tfvars; found $count" }
+$bytes = [System.Text.UTF8Encoding]::new($false).GetBytes($updated.Replace("`n", $newline))
+[System.IO.File]::WriteAllBytes($path, $bytes)
+POWERSHELL
 }
 
 ORIGINAL_MIN="$(read_tfvar node_min_size)"
@@ -97,75 +106,64 @@ LIVE_DESIRED="$(aws eks describe-nodegroup --profile "$AWS_PROFILE" --cluster-na
 read -r -p "This will commit/push dev replica=0 and Karpenter limits=0, then scale $NODEGROUP to zero. Type PAUSE to continue: " CONFIRM
 [[ "$CONFIRM" == "PAUSE" ]] || fail "Cancelled."
 
-REPO_ROOT="$ROOT" python - <<'PY'
-import re
-from pathlib import Path
-
-root = Path(__import__("os").environ["REPO_ROOT"])
-edits = {
-    "helm/apps/java-demo/values-dev.yaml": [(r"^replicaCount:\s*\d+\s*$", "replicaCount: 0")],
-    "helm/apps/nginx-demo/values-dev.yaml": [(r"^replicaCount:\s*\d+\s*$", "replicaCount: 0")],
-    "helm/apps/python-demo/values-dev.yaml": [(r"^replicaCount:\s*\d+\s*$", "replicaCount: 0")],
-    "platform/addons/dev/tempo/values.yaml": [(r"^replicas:\s*\d+\s*$", "replicas: 0")],
-    "platform/addons/dev/opentelemetry-collector/values.yaml": [(r"^replicaCount:\s*\d+\s*$", "replicaCount: 0")],
-    "platform/karpenter/dev/nodepool-on-demand.yaml": [(r"^    cpu:\s*[\"']?\d+[\"']?\s*$", '    cpu: "0"')],
-    "platform/karpenter/dev/nodepool-spot.yaml": [(r"^    cpu:\s*[\"']?\d+[\"']?\s*$", '    cpu: "0"')],
+run_powershell "$(cygpath -w "$ROOT")" <<'POWERSHELL'
+$ErrorActionPreference = 'Stop'
+$root = $args[0]
+$edits = @(
+  @{ Name = 'helm/apps/java-demo/values-dev.yaml'; Pattern = '^replicaCount:\s*\d+\s*$'; Replacement = 'replicaCount: 0' }
+  @{ Name = 'helm/apps/nginx-demo/values-dev.yaml'; Pattern = '^replicaCount:\s*\d+\s*$'; Replacement = 'replicaCount: 0' }
+  @{ Name = 'helm/apps/python-demo/values-dev.yaml'; Pattern = '^replicaCount:\s*\d+\s*$'; Replacement = 'replicaCount: 0' }
+  @{ Name = 'platform/addons/dev/tempo/values.yaml'; Pattern = '^replicas:\s*\d+\s*$'; Replacement = 'replicas: 0' }
+  @{ Name = 'platform/addons/dev/opentelemetry-collector/values.yaml'; Pattern = '^replicaCount:\s*\d+\s*$'; Replacement = 'replicaCount: 0' }
+  @{ Name = 'platform/karpenter/dev/nodepool-on-demand.yaml'; Pattern = '^    cpu:\s*["'']?\d+["'']?\s*$'; Replacement = '    cpu: "0"' }
+  @{ Name = 'platform/karpenter/dev/nodepool-spot.yaml'; Pattern = '^    cpu:\s*["'']?\d+["'']?\s*$'; Replacement = '    cpu: "0"' }
+)
+function Replace-One([string]$text, [string]$pattern, [string]$replacement, [string]$name) {
+  $count = [regex]::Matches($text, $pattern, [System.Text.RegularExpressions.RegexOptions]::Multiline).Count
+  if ($count -ne 1) { throw "Expected one match in $name for $pattern; found $count" }
+  return [regex]::Replace($text, $pattern, $replacement, [System.Text.RegularExpressions.RegexOptions]::Multiline)
 }
-
-def replace_yaml_value(text, section_path, key, key_indent, replacement, filename):
-    lines = text.splitlines(keepends=True)
-    start = 0
-    end = len(lines)
-    for depth, section in enumerate(section_path):
-        indent = "  " * depth
-        header = indent + section + ":"
-        found = next((i for i in range(start, end) if lines[i].rstrip("\r\n") == header), None)
-        if found is None:
-            raise SystemExit(f"Missing YAML section {'.'.join(section_path[:depth + 1])} in {filename}")
-        start = found + 1
-        end = len(lines)
-        for i in range(start, len(lines)):
-            line = lines[i].rstrip("\r\n")
-            if line and not line.lstrip().startswith("#") and not line.startswith(" ") and not line.startswith("\t"):
-                end = i
-                break
-            if line.startswith(indent) and len(line) > len(indent) and not line.startswith(indent + " ") and not line.startswith(indent + "\t"):
-                end = i
-                break
-    prefix = " " * key_indent + key + ":"
-    matches = [i for i in range(start, end) if lines[i].rstrip("\r\n").startswith(prefix)]
-    if len(matches) != 1:
-        raise SystemExit(f"Expected one {'.'.join(section_path)}.{key} in {filename}; found {len(matches)}")
-    i = matches[0]
-    ending = "\r\n" if lines[i].endswith("\r\n") else "\n" if lines[i].endswith("\n") else ""
-    lines[i] = replacement + ending
-    return "".join(lines)
-
-prepared = {}
-for name, replacements in edits.items():
-    path = root / name
-    raw = path.read_bytes()
-    newline = b"\r\n" if b"\r\n" in raw else b"\n"
-    text = raw.decode("utf-8").replace("\r\n", "\n")
-    for pattern, replacement in replacements:
-        updated, count = re.subn(pattern, replacement, text, count=1, flags=re.M)
-        if count != 1:
-            raise SystemExit(f"Expected one match in {name} for {pattern!r}; found {count}")
-        text = updated
-    prepared[path] = text.replace("\n", newline.decode())
-
-prometheus_path = root / "platform/addons/dev/prometheus/values.yaml"
-raw = prometheus_path.read_bytes()
-newline = b"\r\n" if b"\r\n" in raw else b"\n"
-text = raw.decode("utf-8").replace("\r\n", "\n")
-text = replace_yaml_value(text, ["grafana"], "replicas", 2, "  replicas: 0", prometheus_path.name)
-text = replace_yaml_value(text, ["prometheus", "prometheusSpec"], "replicas", 4, "    replicas: 0", prometheus_path.name)
-text = replace_yaml_value(text, ["alertmanager", "alertmanagerSpec"], "replicas", 4, "    replicas: 0", prometheus_path.name)
-prepared[prometheus_path] = text.replace("\n", newline.decode())
-
-for path, text in prepared.items():
-    path.write_text(text, encoding="utf-8", newline="")
-PY
+function Set-NestedYamlValue([string]$text, [string[]]$sections, [string]$key, [int]$indent, [string]$replacement, [string]$filename) {
+  $lines = $text.Replace("`r`n", "`n").Split([string[]]@("`n"), [System.StringSplitOptions]::None)
+  $start = 0; $end = $lines.Length
+  for ($depth = 0; $depth -lt $sections.Length; $depth++) {
+    $sectionIndent = '  ' * $depth
+    $header = $sectionIndent + $sections[$depth] + ':'
+    $found = -1
+    for ($i = $start; $i -lt $end; $i++) { if ($lines[$i] -ceq $header) { $found = $i; break } }
+    if ($found -lt 0) { throw "Missing YAML section $($sections[$depth]) in $filename" }
+    $start = $found + 1; $end = $lines.Length
+    for ($i = $start; $i -lt $lines.Length; $i++) {
+      $line = $lines[$i]
+      if ($line -and -not $line.TrimStart().StartsWith('#') -and -not $line.StartsWith(' ') -and -not $line.StartsWith("`t")) { $end = $i; break }
+      if ($line.StartsWith($sectionIndent) -and $line.Length -gt $sectionIndent.Length -and -not $line.StartsWith($sectionIndent + ' ') -and -not $line.StartsWith($sectionIndent + "`t")) { $end = $i; break }
+    }
+  }
+  $prefix = (' ' * $indent) + $key + ':'
+  $matches = @()
+  for ($i = $start; $i -lt $end; $i++) { if ($lines[$i].StartsWith($prefix)) { $matches += $i } }
+  if ($matches.Count -ne 1) { throw "Expected one $key under $($sections -join '.') in $filename; found $($matches.Count)" }
+  $lines[$matches[0]] = $replacement
+  return ($lines -join "`n")
+}
+foreach ($edit in $edits) {
+  $name = $edit.Name
+  $path = Join-Path $root $name
+  $text = [System.IO.File]::ReadAllText($path)
+  $newline = if ($text.Contains("`r`n")) { "`r`n" } else { "`n" }
+  $normalized = $text.Replace("`r`n", "`n")
+  $normalized = Replace-One $normalized $edit.Pattern $edit.Replacement $name
+  [System.IO.File]::WriteAllText($path, $normalized.Replace("`n", $newline), [System.Text.UTF8Encoding]::new($false))
+}
+$prometheusPath = Join-Path $root 'platform/addons/dev/prometheus/values.yaml'
+$text = [System.IO.File]::ReadAllText($prometheusPath)
+$newline = if ($text.Contains("`r`n")) { "`r`n" } else { "`n" }
+$normalized = $text.Replace("`r`n", "`n")
+$normalized = Set-NestedYamlValue $normalized @('grafana') 'replicas' 2 '  replicas: 0' 'values.yaml'
+$normalized = Set-NestedYamlValue $normalized @('prometheus','prometheusSpec') 'replicas' 4 '    replicas: 0' 'values.yaml'
+$normalized = Set-NestedYamlValue $normalized @('alertmanager','alertmanagerSpec') 'replicas' 4 '    replicas: 0' 'values.yaml'
+[System.IO.File]::WriteAllText($prometheusPath, $normalized.Replace("`n", $newline), [System.Text.UTF8Encoding]::new($false))
+POWERSHELL
 
 set_tfvar node_min_size 0
 git add -- "${GIT_PATHS[@]}"
