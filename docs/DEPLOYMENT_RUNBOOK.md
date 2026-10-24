@@ -280,6 +280,17 @@ application controller, repo-server, Redis, Dex, ApplicationSet controller,
 and notifications controller. Dex is not connected to an identity provider in
 this demo, so SSO is not configured.
 
+This command is the **bootstrap step** for Argo CD: the cluster needs Argo CD
+running before Argo CD can manage applications from Git. Pinning the chart
+version and keeping its values file in Git makes the install repeatable. The
+temporary `--set server.ingress.enabled=false` avoids exposing the UI before
+ingress-nginx and cert-manager are ready; the next documented Helm upgrade
+enables it. In a production pipeline, this bootstrap can be run by a controlled
+deployment job with reviewed inputs and cluster credentials. Once Argo CD is
+installed, use the Git-managed child Applications for add-ons and workloads;
+avoid separate manual `helm upgrade` commands for those releases, since they
+would compete with Argo CD.
+
 After the image values are pushed to `develop`, apply the root Application:
 
 ```bash
