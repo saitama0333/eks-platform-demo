@@ -1,5 +1,4 @@
-# Pause the dev workload while the environment is idle. Restore to 2 to resume.
-replicaCount: 0
+replicaCount: 2
 
 image:
   repository: 829647177071.dkr.ecr.eu-central-1.amazonaws.com/eks-platform-demo/dev/java-demo

@@ -423,6 +423,114 @@ As with dev, ensure QA image values are committed to `develop` before applying
 the root. Argo CD will install the QA add-ons and apps from
 `platform/addons/qa/` and `platform/apps/qa/`.
 
+## Pause and resume dev without destroying the cluster
+
+Use this runbook for an overnight pause when the EKS control plane and data
+should remain, but worker compute should stop. The managed node group and
+Karpenter are independent capacity providers. Setting the managed node group
+to zero alone is not enough: Karpenter can launch replacement nodes for
+unscheduled system pods. Argo CD also self-heals live edits, so make the
+Karpenter pause in Git and push it before scaling down compute.
+
+### Pause dev
+
+1. Set the dev application and monitoring workload replicas to zero in their
+   GitOps values/manifests. In the same change, set
+   `spec.limits.cpu: "0"` in both
+   `platform/karpenter/dev/nodepool-on-demand.yaml` and
+   `platform/karpenter/dev/nodepool-spot.yaml`. Commit and push to `develop`.
+   Do not rely on a live-only `kubectl patch`; Argo CD self-heal restores the
+   values from Git.
+2. Wait for Argo CD to apply the change. Check workload apps are synced and the
+   NodePools have a zero CPU limit:
+
+   ```bash
+   kubectl --context dev -n argocd get applications -o wide
+   kubectl --context dev -n argocd get application karpenter-config \
+     -o jsonpath='{.status.sync.status}{"\n"}{.status.health.status}{"\n"}'
+   kubectl --context dev get nodepools \
+     -o custom-columns='NAME:.metadata.name,CPU-LIMIT:.spec.limits.cpu'
+   ```
+
+   Confirm `karpenter-config` is `Synced` and both NodePool CPU limits are `0`
+   before continuing. This prevents Karpenter from replacing nodes while the
+   managed node group drains. Also inspect disruption budgets before draining:
+
+   ```bash
+   kubectl --context dev get pdb -A
+   ```
+
+   A PDB with `ALLOWED DISRUPTIONS` equal to `0` can hold a drain while its
+   required replicas are unavailable. Karpenter honors PDBs and, without a
+   NodeClaim termination grace period, can wait indefinitely. For a predictable
+   full pause, either configure an appropriate
+   `spec.template.spec.terminationGracePeriod` on the NodePools before their
+   NodeClaims are created, or include temporary PDB relaxation in the pause
+   Git change and sync it before draining. A NodePool change does not update
+   existing NodeClaims, so do not wait until shutdown night to add the grace
+   period.
+3. Review and apply the Terraform plan from
+   `terraform/environments/dev`. The pause configuration sets the node group
+   minimum to zero. Terraform's EKS module ignores the managed node group's
+   `desired_size`, so a successful Terraform apply does not guarantee that
+   desired capacity is zero.
+4. Set the managed node group's actual desired capacity to zero:
+
+   ```bash
+   aws --profile sandbox3 eks update-nodegroup-config \
+     --cluster-name eks-platform-demo-dev \
+     --nodegroup-name nodegroup-worker-core-2e1b6f3add7fef027c250305c2 \
+     --region eu-central-1 \
+     --scaling-config minSize=0,maxSize=2,desiredSize=0
+   ```
+
+   Check the returned update ID with `aws eks describe-update`, and confirm
+   `describe-nodegroup` reports `minSize: 0` and `desiredSize: 0`. A node shown
+   as `Ready,SchedulingDisabled` may still be draining; wait until the ASG has
+   no instances and the node disappears from Kubernetes.
+5. After the managed node group is drained, the NodePool CPU limits remain
+   zero, and PDBs allow the planned disruption (or the NodeClaims have a
+   configured termination grace period), remove Karpenter-created nodes
+   through their NodeClaims:
+
+   ```bash
+   kubectl --context dev get nodeclaims -o wide
+   kubectl --context dev delete nodeclaims --all
+   kubectl --context dev get nodes -o wide
+   kubectl --context dev get nodeclaims -o wide
+   ```
+
+   Wait for the node and NodeClaim lists to become empty. Do not delete EC2
+   instances directly while Karpenter is managing them. With no workers,
+   Argo CD and other in-cluster controllers will be unavailable until compute
+   is restored; the EKS control plane remains.
+
+### Resume dev
+
+1. Restore the managed node group to two nodes using the AWS CLI, while the
+   Karpenter NodePools are still capped:
+
+   ```bash
+   aws --profile sandbox3 eks update-nodegroup-config \
+     --cluster-name eks-platform-demo-dev \
+     --nodegroup-name nodegroup-worker-core-2e1b6f3add7fef027c250305c2 \
+     --region eu-central-1 \
+     --scaling-config minSize=2,maxSize=2,desiredSize=2
+   ```
+
+2. Wait for the nodes to become `Ready`. Then revert the pause commit(s) in
+   Git and push to `develop` to restore workload replicas and Karpenter
+   NodePool limits. Review and apply the Terraform plan that restores the
+   managed node group minimum to two. Argo CD will resume syncing once its
+   pods are running.
+3. Verify Argo CD applications are synced/healthy and check that no unexpected
+   Karpenter NodeClaims remain:
+
+   ```bash
+   kubectl --context dev -n argocd get applications -o wide
+   kubectl --context dev get nodes,nodeclaims -o wide
+   ```
+
 ## Destroy and recreate an environment
 
 Each environment keeps Terraform state in the existing `tf-gitops-nikhil`

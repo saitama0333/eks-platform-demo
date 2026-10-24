@@ -106,24 +106,29 @@ module "eks" {
 
   addons = {
     vpc-cni = {
-      most_recent    = true
+      addon_version  = try(var.addon_versions["vpc-cni"], null)
+      most_recent    = var.addon_versions == null
       before_compute = true
     }
 
     coredns = {
-      most_recent = true
+      addon_version = try(var.addon_versions["coredns"], null)
+      most_recent   = var.addon_versions == null
     }
 
     kube-proxy = {
-      most_recent = true
+      addon_version = try(var.addon_versions["kube-proxy"], null)
+      most_recent   = var.addon_versions == null
     }
 
     eks-pod-identity-agent = {
-      most_recent = true
+      addon_version = try(var.addon_versions["eks-pod-identity-agent"], null)
+      most_recent   = var.addon_versions == null
     }
 
     aws-ebs-csi-driver = {
-      most_recent = true
+      addon_version = try(var.addon_versions["aws-ebs-csi-driver"], null)
+      most_recent   = var.addon_versions == null
 
       pod_identity_association = [
         {

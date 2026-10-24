@@ -1,6 +1,5 @@
 mode: deployment
-# Pause the collector while dev is idle.
-replicaCount: 0
+replicaCount: 1
 image:
   repository: otel/opentelemetry-collector-contrib
 service:

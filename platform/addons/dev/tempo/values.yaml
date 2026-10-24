@@ -1,5 +1,4 @@
-# Pause the Tempo server while dev is idle. Its PVC is retained.
-replicas: 0
+replicas: 1
 tempo:
   reportingEnabled: false
   receivers:

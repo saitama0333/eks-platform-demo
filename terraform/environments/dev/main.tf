@@ -19,6 +19,7 @@ module "eks" {
   aws_region   = var.aws_region
 
   cluster_version = var.cluster_version
+  addon_versions  = var.eks_addon_versions
 
   vpc_id                               = module.vpc.vpc_id
   private_subnet_ids                   = module.vpc.private_subnet_ids
@@ -26,11 +27,9 @@ module "eks" {
 
   node_instance_types = var.node_instance_types
 
-  # Pause the dev worker ASG while the environment is idle. Revert this pause
-  # change to restore the configured node_min_size and node_desired_size.
-  node_min_size     = 0
+  node_min_size     = var.node_min_size
   node_max_size     = var.node_max_size
-  node_desired_size = 0
+  node_desired_size = var.node_desired_size
   node_disk_size    = var.node_disk_size
 }
 
@@ -56,7 +55,7 @@ module "ingress_nlb" {
   vpc_id                 = module.vpc.vpc_id
   public_subnet_ids      = module.vpc.public_subnet_ids
   autoscaling_group_name = try(module.eks.managed_node_group_autoscaling_group_names[0], "")
-  attach_to_asg           = true
+  attach_to_asg          = true
 
   tags = {
     Project     = var.project_name

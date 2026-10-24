@@ -19,6 +19,20 @@ variable "cluster_version" {
   default     = "1.33"
 }
 
+variable "addon_versions" {
+  description = "Optional explicit versions for all EKS managed add-ons; when omitted, select the latest compatible AWS-published versions."
+  type        = map(string)
+  default     = null
+
+  validation {
+    condition = var.addon_versions == null || alltrue([
+      for name in ["vpc-cni", "coredns", "kube-proxy", "eks-pod-identity-agent", "aws-ebs-csi-driver"] :
+      contains(keys(var.addon_versions), name) && var.addon_versions[name] != ""
+    ])
+    error_message = "When pinning add-ons, provide a non-empty version for every managed add-on."
+  }
+}
+
 variable "vpc_id" {
   description = "VPC ID"
   type        = string

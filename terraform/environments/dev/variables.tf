@@ -84,6 +84,18 @@ variable "cluster_version" {
   type        = string
 }
 
+variable "eks_addon_versions" {
+  description = "Pinned latest AWS-published EKS add-on versions for Kubernetes 1.33; review compatibility and update deliberately when changing cluster_version."
+  type        = map(string)
+  default = {
+    vpc-cni                = "v1.23.2-eksbuild.6"
+    coredns                = "v1.13.2-eksbuild.59"
+    kube-proxy             = "v1.33.10-eksbuild.59"
+    eks-pod-identity-agent = "v1.4.1-eksbuild.2"
+    aws-ebs-csi-driver     = "v1.67.1-eksbuild.1"
+  }
+}
+
 variable "node_instance_types" {
   description = "EC2 instance types for the core managed node group"
   type        = list(string)

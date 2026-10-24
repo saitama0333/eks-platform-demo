@@ -47,9 +47,7 @@ spec:
       expireAfter: 720h
 
   limits:
-    # Set to zero while the dev environment is paused to prevent Karpenter
-    # from replacing the managed node group capacity during scale-down.
-    cpu: "0"
+    cpu: "20"
 
   disruption:
     consolidationPolicy: WhenEmptyOrUnderutilized
