@@ -1,0 +1,14 @@
+replicas: 0
+tempo:
+  reportingEnabled: false
+  receivers:
+    otlp:
+      protocols:
+        grpc: {}
+        http: {}
+persistence:
+  enabled: true
+  storageClassName: gp3-encrypted
+  accessModes:
+    - ReadWriteOnce
+  size: 10Gi

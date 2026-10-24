@@ -1,0 +1,99 @@
+grafana:
+  enabled: true
+  # kube-prometheus-stack ships Kubernetes-mixin dashboards as ConfigMaps.
+  defaultDashboardsEnabled: true
+  sidecar:
+    dashboards:
+      enabled: true
+      searchNamespace: ALL
+  replicas: 0
+  # The Grafana PVC is ReadWriteOnce. Stop the old pod before attaching it
+  # to a replacement during upgrades and node rollouts.
+  deploymentStrategy:
+    type: Recreate
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+      nginx.ingress.kubernetes.io/whitelist-source-range: "58.84.62.245/32"
+    hosts:
+      - grafana.dev.appledore.in
+    tls:
+      - secretName: grafana-dev-appledore-tls
+        hosts:
+          - grafana.dev.appledore.in
+  persistence:
+    enabled: true
+    type: pvc
+    storageClassName: gp3-encrypted
+    accessModes:
+      - ReadWriteOnce
+    size: 5Gi
+  additionalDataSources:
+    - name: Tempo
+      type: tempo
+      access: proxy
+      url: http://tempo.monitoring.svc.cluster.local:3100
+      isDefault: false
+prometheus:
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+      nginx.ingress.kubernetes.io/whitelist-source-range: "58.84.62.245/32"
+    hosts:
+      - prometheus.dev.appledore.in
+    tls:
+      - secretName: prometheus-dev-appledore-tls
+        hosts:
+          - prometheus.dev.appledore.in
+  prometheusSpec:
+    replicas: 0
+    retention: 7d
+    retentionSize: 18GB
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp3-encrypted
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 20Gi
+alertmanager:
+  enabled: true
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+      nginx.ingress.kubernetes.io/whitelist-source-range: "58.84.62.245/32"
+    hosts:
+      - alertmanager.dev.appledore.in
+    tls:
+      - secretName: alertmanager-dev-appledore-tls
+        hosts:
+          - alertmanager.dev.appledore.in
+  alertmanagerSpec:
+    replicas: 0
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp3-encrypted
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 5Gi
+
+# Keep the chart's Kubernetes-mixin recording and alert rules enabled.
+defaultRules:
+  create: true
+
+kubeStateMetrics:
+  enabled: true
+
+prometheus-node-exporter:
+  enabled: true

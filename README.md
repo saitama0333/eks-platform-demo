@@ -1,50 +1,19 @@
-Production-style Amazon EKS platform built with Terraform, GitHub Actions, ArgoCD, Helm, Karpenter, Velero, AWS Secrets Manager, Prometheus, Grafana, and OpenTelemetry.
+# EKS platform demo
 
-## Architecture
+Terraform provisions separate dev and QA AWS foundations. Argo CD deploys and
+reconciles Kubernetes platform services and sample applications from Git.
+GitHub Actions is supported today; GitLab CI files are provided as an opt-in
+alternative for validation and image publishing.
 
-GitHub
-  │
-  ▼
-GitHub Actions
-  │
-  ├── Test
-  ├── Docker Build
-  ├── Security Scan
-  └── Push Image
-          │
-          ▼
-        Amazon ECR
-          │
-          ▼
-        ArgoCD
-          │
-          ▼
-        Amazon EKS
-          │
-    ┌─────┼───────────────┐
-    │     │               │
- Karpenter Secrets      Observability
-    │     │               │
-    │     ▼               ├── Prometheus
-    │  Secrets Manager    ├── Grafana
-    │                     └── OpenTelemetry
-    │
-    └── Dynamic EC2 capacity
+Start here:
 
-EKS
- │
- └── Velero
-       │
-       ▼
-      S3
+- [Architecture and component reference](docs/ARCHITECTURE.md): what runs,
+  how the pieces connect, and the current security and reliability boundaries.
+- [Deployment and operations runbook](docs/DEPLOYMENT_RUNBOOK.md): launch,
+  Terraform, image publishing, Argo CD, DNS/TLS, pause/resume, and recovery.
+- [GitLab CI setup](.gitlab/README.md): pipeline stages, runner requirements,
+  OIDC enablement, and required project variables.
 
-## Repository Structure
-
-```text
-.github/workflows/   CI/CD workflows
-app/                 Application source
-terraform/           AWS infrastructure
-helm/                Application Helm chart
-argocd/              GitOps configuration
-platform/            Kubernetes platform components
-docs/                Documentation
+This is a useful dev/QA foundation, but it is not production-ready as
+configured. The architecture guide records the specific gaps to review before
+production use.

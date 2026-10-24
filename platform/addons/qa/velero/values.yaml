@@ -1,0 +1,37 @@
+serviceAccount:
+  server:
+    create: true
+    name: velero
+kubectl:
+  image:
+    # The chart's default derives the unavailable tag "1.33". Pin kubectl
+    # to the configured EKS version instead.
+    repository: docker.io/alpine/k8s
+    tag: 1.33.13
+credentials:
+  useSecret: false
+configuration:
+  backupStorageLocation:
+    - name: default
+      provider: aws
+      bucket: tf-gitops-nikhil
+      prefix: backup/qa
+      config:
+        region: eu-central-1
+  volumeSnapshotLocation: []
+  uploaderType: kopia
+snapshotsEnabled: false
+deployNodeAgent: true
+initContainers:
+  - name: velero-plugin-for-aws
+    image: velero/velero-plugin-for-aws:v1.10.0
+    imagePullPolicy: IfNotPresent
+    volumeMounts:
+      - mountPath: /target
+        name: plugins
+schedules:
+  daily:
+    schedule: "0 2 * * *"
+    template:
+      ttl: 168h
+      includedNamespaces: [default]

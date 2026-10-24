@@ -1,0 +1,30 @@
+app-image-build-and-scan:
+  stage: image
+  image: docker:27-cli
+  services:
+    - name: docker:27-dind
+      command: ["--tls=false"]
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+  parallel:
+    matrix:
+      - APP_NAME: [python-demo, java-demo, nginx-demo]
+  before_script:
+    - apk add --no-cache bash curl trivy
+  script:
+    - docker build --file "apps/$APP_NAME/Dockerfile" --tag "eks-platform-demo:$APP_NAME-ci" "apps/$APP_NAME"
+    - trivy image --exit-code 1 --severity CRITICAL --ignore-unfixed "eks-platform-demo:$APP_NAME-ci"
+    - |
+      if [ "$APP_NAME" = "nginx-demo" ]; then
+        container_id=$(docker run --detach --publish 8080:8080 "eks-platform-demo:$APP_NAME-ci")
+        trap 'docker rm --force "$container_id" >/dev/null' EXIT
+        for attempt in $(seq 1 10); do
+          if curl --fail --silent http://docker:8080/healthz | grep -qx ok; then
+            exit 0
+          fi
+          sleep 1
+        done
+        docker logs "$container_id"
+        exit 1
+      fi

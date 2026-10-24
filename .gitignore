@@ -10,6 +10,7 @@ override.tf
 override.tf.json
 *_override.tf
 *_override.tf.json
+dev-ingress-nlb-dns-name.txt
 
 # Terraform plan
 *.tfplan
@@ -30,6 +31,7 @@ __pycache__/
 .pytest_cache/
 .venv/
 venv/
+**/target/
 
 # Docker
 docker-compose.override.yml

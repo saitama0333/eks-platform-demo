@@ -1,0 +1,1 @@
+eks-platform-demo-dev-ingress-c440fb521ee35c08.elb.eu-central-1.amazonaws.com

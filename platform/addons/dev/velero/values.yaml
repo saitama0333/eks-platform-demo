@@ -1,0 +1,37 @@
+serviceAccount:
+  server:
+    create: true
+    name: velero
+# Argo CD renders and applies the chart's CRDs directly. Disable the optional
+# pre-install/pre-upgrade hook: it copies /bin/sh and kubectl from a separate
+# image into the Velero image, which is not a compatible runtime assumption.
+# Review and apply CRD changes explicitly when upgrading the Velero chart.
+upgradeCRDs: false
+
+credentials:
+  useSecret: false
+configuration:
+  backupStorageLocation:
+    - name: default
+      provider: aws
+      bucket: tf-gitops-nikhil
+      prefix: backup/dev
+      config:
+        region: eu-central-1
+  volumeSnapshotLocation: []
+  uploaderType: kopia
+snapshotsEnabled: false
+deployNodeAgent: true
+initContainers:
+  - name: velero-plugin-for-aws
+    image: velero/velero-plugin-for-aws:v1.10.0
+    imagePullPolicy: IfNotPresent
+    volumeMounts:
+      - mountPath: /target
+        name: plugins
+schedules:
+  daily:
+    schedule: "0 2 * * *"
+    template:
+      ttl: 168h
+      includedNamespaces: [default]

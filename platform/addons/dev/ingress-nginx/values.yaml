@@ -1,0 +1,15 @@
+controller:
+  kind: DaemonSet
+  nodeSelector:
+    role: core
+  ingressClass: nginx
+  ingressClassResource:
+    name: nginx
+    default: true
+  service:
+    type: NodePort
+    # Preserve the real client IP so Ingress source-range allowlists can match it.
+    externalTrafficPolicy: Local
+    nodePorts:
+      http: 30080
+      https: 30443
