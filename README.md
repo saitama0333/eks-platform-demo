@@ -13,6 +13,8 @@ Start here:
   Terraform, image publishing, Argo CD, DNS/TLS, pause/resume, and recovery.
 - [GitLab CI setup](.gitlab/README.md): pipeline stages, runner requirements,
   OIDC enablement, and required project variables.
+- [kagent dev assistant](docs/KAGENT.md): read-only Kubernetes, monitoring,
+  telemetry, and backup troubleshooting setup.
 
 This is a useful dev/QA foundation, but it is not production-ready as
 configured. The architecture guide records the specific gaps to review before

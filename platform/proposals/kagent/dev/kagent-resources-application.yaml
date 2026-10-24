@@ -7,7 +7,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/saitama0333/eks-platform-demo.git
-    targetRevision: develop
+    targetRevision: test-kagent
     path: platform/proposals/kagent/dev
     directory:
       include: kagent-resources.yaml

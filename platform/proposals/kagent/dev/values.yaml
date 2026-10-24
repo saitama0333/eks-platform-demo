@@ -1,4 +1,4 @@
-# Dev evaluation only. Keep the UI private and use kubectl port-forward.
+# Dev read-only operations assistant. Keep the UI private and use kubectl port-forward.
 controller:
   replicas: 1
   auth:
@@ -41,12 +41,47 @@ kagent-tools:
       - default
       - ingress-nginx
       - monitoring
+      - velero
+      - kube-system
+      - cert-manager
+      - external-secrets
+      - kagent
     additionalRules:
       - apiGroups:
           - argoproj.io
         resources:
           - applications
           - applicationsets
+        verbs:
+          - get
+          - list
+          - watch
+      - apiGroups:
+          - velero.io
+        resources:
+          - backups
+          - backupstoragelocations
+          - deletebackuprequests
+          - downloadrequests
+          - podvolumebackups
+          - podvolumerestores
+          - restores
+          - schedules
+          - serverstatusrequests
+          - volumesnapshotlocations
+        verbs:
+          - get
+          - list
+          - watch
+      - apiGroups:
+          - monitoring.coreos.com
+        resources:
+          - alertmanagers
+          - podmonitors
+          - prometheuses
+          - prometheusrules
+          - servicemonitors
+          - thanosrulers
         verbs:
           - get
           - list
@@ -78,4 +113,20 @@ cilium-manager-agent:
 cilium-debug-agent:
   enabled: false
 grafana-mcp:
-  enabled: false
+  enabled: true
+  image:
+    registry: docker.io
+    repository: grafana/mcp-grafana
+    tag: 1.5.0
+    pullPolicy: IfNotPresent
+  grafana:
+    url: http://kube-prometheus-stack-grafana.monitoring.svc.cluster.local/api
+    # This Secret is created by the ExternalSecret in kagent-resources.yaml.
+    secretRef: kagent-grafana-readonly
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

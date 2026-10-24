@@ -1,21 +1,9 @@
-apiVersion: external-secrets.io/v1beta1
-kind: ExternalSecret
+apiVersion: v1
+kind: ServiceAccount
 metadata:
-  name: kagent-openai
+  name: dev-troubleshooter
   namespace: kagent
-spec:
-  refreshInterval: 1h
-  secretStoreRef:
-    name: aws-secrets-manager
-    kind: ClusterSecretStore
-  target:
-    name: kagent-openai
-    creationPolicy: Owner
-  data:
-    - secretKey: OPENAI_API_KEY
-      remoteRef:
-        key: eks-platform-demo/dev/kagent-openai
-        property: OPENAI_API_KEY
+automountServiceAccountToken: false
 ---
 apiVersion: kagent.dev/v1alpha2
 kind: Agent
@@ -24,17 +12,24 @@ metadata:
   namespace: kagent
 spec:
   type: Declarative
-  description: Read-only helper for investigating dev Kubernetes issues.
+  description: Read-only helper for investigating dev Kubernetes, monitoring, telemetry and backup issues.
   declarative:
     modelConfig: default-model-config
     stream: true
+    deployment:
+      serviceAccountName: dev-troubleshooter
     systemMessage: |
       You are a read-only troubleshooting assistant for the eks-platform-demo dev cluster.
-      Use only the Kubernetes inspection tools provided to you. Never claim you changed
-      anything. Do not ask for credentials or secret values. Do not suggest running
-      destructive commands. Explain what you observed, separate facts from likely causes,
-      and suggest safe next checks. Any actual fix must be reviewed by a person and made
-      through Git and Argo CD.
+      Use the Kubernetes, Grafana and Prometheus inspection tools provided to you. You may
+      inspect Kubernetes objects and pod logs, Argo CD Application status, Velero backup
+      resources, OpenTelemetry Collector resources and logs, Grafana dashboards/data sources,
+      and Prometheus metrics. This cluster does not currently provide Loki log queries or
+      direct Tempo trace queries through this agent; do not claim those are available.
+      Do not use local shell or file tools, even if they appear in the interface.
+      Never claim you changed anything. Do not ask for credentials or secret values. Do not
+      suggest destructive commands or changes. Explain what you observed, separate facts from
+      likely causes, and suggest safe next checks. Any actual fix must be reviewed by a person
+      and made through Git and Argo CD.
     tools:
       - type: McpServer
         mcpServer:
@@ -44,5 +39,22 @@ spec:
           toolNames:
             - k8s_get_resources
             - k8s_describe_resource
+            - k8s_get_resource_yaml
             - k8s_get_pod_logs
             - k8s_get_events
+      - type: McpServer
+        mcpServer:
+          apiGroup: kagent.dev
+          name: kagent-grafana-mcp
+          kind: RemoteMCPServer
+          toolNames:
+            - query_prometheus
+            - list_prometheus_metric_names
+            - list_prometheus_metric_metadata
+            - list_prometheus_label_names
+            - list_prometheus_label_values
+            - search_dashboards
+            - get_dashboard_by_uid
+            - get_dashboard_panel_queries
+            - list_datasources
+            - get_datasource

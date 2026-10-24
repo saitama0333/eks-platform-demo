@@ -14,7 +14,7 @@ spec:
         valueFiles:
           - $values/platform/proposals/kagent/dev/values.yaml
     - repoURL: https://github.com/saitama0333/eks-platform-demo.git
-      targetRevision: develop
+      targetRevision: test-kagent
       ref: values
   destination:
     server: https://kubernetes.default.svc
