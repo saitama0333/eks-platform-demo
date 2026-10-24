@@ -6,7 +6,7 @@ grafana:
     dashboards:
       enabled: true
       searchNamespace: ALL
-  replicas: 1
+  replicas: 0
   # The Grafana PVC is ReadWriteOnce. Stop the old pod before attaching it
   # to a replacement during upgrades and node rollouts.
   deploymentStrategy:
@@ -50,7 +50,7 @@ prometheus:
         hosts:
           - prometheus.dev.appledore.in
   prometheusSpec:
-    replicas: 1
+    replicas: 0
     retention: 7d
     retentionSize: 18GB
     storageSpec:
@@ -77,7 +77,7 @@ alertmanager:
         hosts:
           - alertmanager.dev.appledore.in
   alertmanagerSpec:
-    replicas: 1
+    replicas: 0
     storage:
       volumeClaimTemplate:
         spec:
