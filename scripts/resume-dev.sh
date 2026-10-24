@@ -19,7 +19,7 @@ WAIT_SECONDS="${DEV_RESUME_WAIT_SECONDS:-1800}"
 
 fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || fail "Required command not found: $1"; }
-for tool in git aws kubectl python; do need "$tool"; done
+for tool in git aws kubectl powershell.exe cygpath; do need "$tool"; done
 [[ -f "$STATE_FILE" ]] || fail "Pause state not found at $STATE_FILE. The pause script must complete first."
 [[ -f "$TFVARS" ]] || fail "Missing $TFVARS. Copy terraform.tfvars.example and configure it first."
 [[ "$(git branch --show-current)" == "$BRANCH" ]] || fail "Switch to branch $BRANCH before resuming."
@@ -52,30 +52,42 @@ aws sts get-caller-identity --profile "$AWS_PROFILE" >/dev/null || fail "AWS cre
 GROUP_STATUS="$(aws eks describe-nodegroup --profile "$AWS_PROFILE" --cluster-name "$CLUSTER_NAME" --nodegroup-name "$NODEGROUP" --region "$AWS_REGION" --query 'nodegroup.status' --output text)"
 [[ "$GROUP_STATUS" == "ACTIVE" ]] || fail "Node group status is $GROUP_STATUS; wait for its current update before resuming."
 
+run_powershell() {
+  local script_path script_win status
+  script_path="$(mktemp --suffix=.ps1)"
+  cat > "$script_path"
+  script_win="$(cygpath -w "$script_path")"
+  powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$script_win" "$@"
+  status=$?
+  rm -f "$script_path"
+  return "$status"
+}
+
 set_min_size() {
-  python - "$TFVARS" "$1" <<'PY'
-import re, sys
-from pathlib import Path
-path = Path(sys.argv[1])
-raw = path.read_bytes()
-newline = b"\r\n" if b"\r\n" in raw else b"\n"
-text = raw.decode("utf-8").replace("\r\n", "\n")
-updated, count = re.subn(r"(?m)^node_min_size\s*=\s*\d+\s*$", f"node_min_size = {sys.argv[2]}", text)
-if count != 1:
-    raise SystemExit(f"Expected one node_min_size setting; found {count}")
-path.write_bytes(updated.replace("\n", newline.decode()).encode("utf-8"))
-PY
+  run_powershell "$(cygpath -w "$TFVARS")" "$1" <<'POWERSHELL'
+$ErrorActionPreference = 'Stop'
+$path, $value = $args
+$raw = [System.IO.File]::ReadAllBytes($path)
+$text = [System.Text.Encoding]::UTF8.GetString($raw)
+$newline = if ($text.Contains("`r`n")) { "`r`n" } else { "`n" }
+$normalized = $text.Replace("`r`n", "`n")
+$pattern = '(?m)^node_min_size\s*=\s*\d+\s*$'
+$count = [regex]::Matches($normalized, $pattern).Count
+if ($count -ne 1) { throw "Expected one node_min_size setting; found $count" }
+$updated = [regex]::Replace($normalized, $pattern, "node_min_size = $value")
+[System.IO.File]::WriteAllBytes($path, [System.Text.UTF8Encoding]::new($false).GetBytes($updated.Replace("`n", $newline)))
+POWERSHELL
 }
 
 read_min_size() {
-  python - "$TFVARS" <<'PY'
-import re, sys
-from pathlib import Path
-found = re.findall(r"(?m)^node_min_size\s*=\s*(\d+)\s*$", Path(sys.argv[1]).read_text(encoding="utf-8"))
-if len(found) != 1:
-    raise SystemExit("Expected one numeric node_min_size in terraform.tfvars")
-print(found[0])
-PY
+  run_powershell "$(cygpath -w "$TFVARS")" <<'POWERSHELL'
+$ErrorActionPreference = 'Stop'
+$path = $args[0]
+$text = [System.IO.File]::ReadAllText($path)
+$matches = [regex]::Matches($text, '(?m)^node_min_size\s*=\s*(\d+)\s*$')
+if ($matches.Count -ne 1) { throw 'Expected one numeric node_min_size in terraform.tfvars' }
+Write-Output $matches[0].Groups[1].Value
+POWERSHELL
 }
 
 [[ "$(read_min_size)" == "0" ]] || fail "terraform.tfvars node_min_size is not 0; this does not look like the paused state."

@@ -47,8 +47,7 @@ spec:
       expireAfter: 720h
 
   limits:
-    cpu: "20"
-
+    cpu: "0"
   disruption:
     consolidationPolicy: WhenEmptyOrUnderutilized
     consolidateAfter: 1m
