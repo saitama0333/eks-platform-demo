@@ -19,6 +19,7 @@ module "eks" {
   aws_region   = var.aws_region
 
   cluster_version = var.cluster_version
+  addon_versions  = var.eks_addon_versions
 
   vpc_id                               = module.vpc.vpc_id
   private_subnet_ids                   = module.vpc.private_subnet_ids

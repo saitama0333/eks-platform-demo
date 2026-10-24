@@ -4,6 +4,7 @@ locals {
   }
 
   github_oidc_provider_arn = var.create_github_oidc_provider ? aws_iam_openid_connect_provider.github[0].arn : var.github_oidc_provider_arn
+  gitlab_oidc_provider_arn = var.create_gitlab_oidc_provider ? aws_iam_openid_connect_provider.gitlab[0].arn : var.gitlab_oidc_provider_arn
 }
 
 resource "aws_ecr_repository" "apps" {
@@ -50,6 +51,14 @@ resource "aws_iam_openid_connect_provider" "github" {
   tags           = var.tags
 }
 
+# Create GitLab's account-wide provider only when explicitly enabled.
+resource "aws_iam_openid_connect_provider" "gitlab" {
+  count          = var.create_gitlab_oidc_provider ? 1 : 0
+  url            = "https://gitlab.com"
+  client_id_list = ["sts.amazonaws.com"]
+  tags           = var.tags
+}
+
 data "aws_iam_policy_document" "github_actions_assume_role" {
   statement {
     effect  = "Allow"
@@ -70,6 +79,31 @@ data "aws_iam_policy_document" "github_actions_assume_role" {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
       values   = ["repo:${var.github_repository}:ref:refs/heads/develop"]
+    }
+  }
+
+  dynamic "statement" {
+    for_each = var.enable_gitlab_oidc ? [1] : []
+    content {
+      effect  = "Allow"
+      actions = ["sts:AssumeRoleWithWebIdentity"]
+
+      principals {
+        type        = "Federated"
+        identifiers = [local.gitlab_oidc_provider_arn]
+      }
+
+      condition {
+        test     = "StringEquals"
+        variable = "gitlab.com:aud"
+        values   = ["sts.amazonaws.com"]
+      }
+
+      condition {
+        test     = "StringEquals"
+        variable = "gitlab.com:sub"
+        values   = ["project_path:${var.gitlab_project_path}:ref_type:branch:ref:develop"]
+      }
     }
   }
 }

@@ -23,6 +23,10 @@ module "ecr" {
   project_name                = var.project_name
   environment                 = var.environment
   github_repository           = var.github_repository
+  gitlab_project_path         = var.gitlab_project_path
+  enable_gitlab_oidc          = var.enable_gitlab_oidc
+  create_gitlab_oidc_provider = var.create_gitlab_oidc_provider
+  gitlab_oidc_provider_arn    = var.gitlab_oidc_provider_arn
   create_github_oidc_provider = var.create_github_oidc_provider
   github_oidc_provider_arn    = var.github_oidc_provider_arn
 

@@ -3,6 +3,11 @@ output "dns_name" {
   value       = aws_lb.this.dns_name
 }
 
+output "canonical_hosted_zone_id" {
+  description = "Canonical Route 53 hosted zone ID for alias records targeting this load balancer"
+  value       = aws_lb.this.zone_id
+}
+
 output "arn" {
   description = "ARN of the Network Load Balancer"
   value       = aws_lb.this.arn

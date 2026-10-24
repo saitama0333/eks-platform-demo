@@ -144,3 +144,27 @@ variable "github_oidc_provider_arn" {
   type        = string
   default     = null
 }
+
+variable "gitlab_project_path" {
+  description = "GitLab namespace/project path allowed to publish application images"
+  type        = string
+  default     = "saitama0333/eks-platform-demo"
+}
+
+variable "enable_gitlab_oidc" {
+  description = "Allow GitLab CI to publish images with OIDC; opt in only after configuring the GitLab project"
+  type        = bool
+  default     = false
+}
+
+variable "create_gitlab_oidc_provider" {
+  description = "Create the account-wide GitLab OIDC provider from dev; only one environment should set true"
+  type        = bool
+  default     = false
+}
+
+variable "gitlab_oidc_provider_arn" {
+  description = "Existing account-wide GitLab OIDC provider ARN when another environment created it"
+  type        = string
+  default     = null
+}

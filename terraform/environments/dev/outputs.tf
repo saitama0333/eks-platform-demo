@@ -23,9 +23,19 @@ output "github_oidc_provider_arn" {
   value       = module.ecr.github_oidc_provider_arn
 }
 
+output "gitlab_oidc_provider_arn" {
+  description = "Account-wide GitLab.com OIDC provider ARN when GitLab integration is enabled"
+  value       = module.ecr.gitlab_oidc_provider_arn
+}
+
 output "dev_ingress_nlb_dns_name" {
   description = "Public DNS name of the dev ingress Network Load Balancer"
   value       = module.ingress_nlb.dns_name
+}
+
+output "dev_ingress_nlb_canonical_zone_id" {
+  description = "Canonical hosted zone ID for Route 53 alias records targeting the dev NLB"
+  value       = module.ingress_nlb.canonical_hosted_zone_id
 }
 
 output "vpc_id" {

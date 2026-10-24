@@ -44,6 +44,30 @@ variable "create_github_oidc_provider" {
   default     = false
 }
 
+variable "gitlab_project_path" {
+  description = "GitLab namespace/project path allowed to publish application images"
+  type        = string
+  default     = "saitama0333/eks-platform-demo"
+}
+
+variable "enable_gitlab_oidc" {
+  description = "Allow GitLab CI to publish images with OIDC; opt in only after configuring the GitLab project"
+  type        = bool
+  default     = false
+}
+
+variable "create_gitlab_oidc_provider" {
+  description = "Create the account-wide GitLab OIDC provider from QA only when dev is not creating it"
+  type        = bool
+  default     = false
+}
+
+variable "gitlab_oidc_provider_arn" {
+  description = "Existing account-wide GitLab OIDC provider ARN when another environment created it"
+  type        = string
+  default     = null
+}
+
 variable "velero_bucket_name" {
   description = "Existing S3 bucket shared with Terraform state"
   type        = string
@@ -106,6 +130,18 @@ variable "single_nat_gateway" {
 variable "cluster_version" {
   description = "Kubernetes version for the QA EKS cluster"
   type        = string
+}
+
+variable "eks_addon_versions" {
+  description = "Pinned EKS add-on builds compatible with Kubernetes 1.33; review on cluster/add-on upgrades"
+  type        = map(string)
+  default = {
+    vpc-cni                = "v1.23.2-eksbuild.6"
+    coredns                = "v1.13.2-eksbuild.59"
+    kube-proxy             = "v1.33.10-eksbuild.59"
+    eks-pod-identity-agent = "v1.4.1-eksbuild.2"
+    aws-ebs-csi-driver     = "v1.67.1-eksbuild.1"
+  }
 }
 
 variable "node_instance_types" {

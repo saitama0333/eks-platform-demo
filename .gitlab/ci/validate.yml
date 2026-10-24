@@ -1,0 +1,19 @@
+helm-lint-and-render:
+  stage: validate
+  image:
+    name: alpine/helm:3.17.3
+    entrypoint: [""]
+  before_script:
+    - apk add --no-cache bash
+  script:
+    - |
+      for app in python-demo java-demo nginx-demo; do
+        helm lint "helm/apps/$app" --values "helm/apps/$app/values-dev.yaml"
+        helm lint "helm/apps/$app" --values "helm/apps/$app/values-qa.yaml"
+        helm template "$app" "helm/apps/$app" \
+          --values "helm/apps/$app/values-dev.yaml" \
+          --set image.repository=example.invalid/demo --set image.tag=ci-check >/dev/null
+        helm template "$app-qa" "helm/apps/$app" \
+          --values "helm/apps/$app/values-qa.yaml" \
+          --set image.repository=example.invalid/demo --set image.tag=ci-check >/dev/null
+      done

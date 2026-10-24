@@ -12,3 +12,8 @@ output "github_oidc_provider_arn" {
   description = "Account-wide GitHub Actions OIDC provider ARN for reuse by other environment roots"
   value       = local.github_oidc_provider_arn
 }
+
+output "gitlab_oidc_provider_arn" {
+  description = "Account-wide GitLab.com OIDC provider ARN, when enabled"
+  value       = local.gitlab_oidc_provider_arn
+}

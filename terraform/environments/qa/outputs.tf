@@ -23,6 +23,11 @@ output "github_oidc_provider_arn" {
   value       = module.ecr.github_oidc_provider_arn
 }
 
+output "gitlab_oidc_provider_arn" {
+  description = "Account-wide GitLab.com OIDC provider ARN when GitLab integration is enabled"
+  value       = module.ecr.gitlab_oidc_provider_arn
+}
+
 output "vpc_id" {
   description = "VPC ID for the QA cluster and add-on configuration"
   value       = module.vpc.vpc_id

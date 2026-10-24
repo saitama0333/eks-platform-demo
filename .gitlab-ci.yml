@@ -1,0 +1,18 @@
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH'
+
+stages:
+  - security
+  - validate
+  - test
+  - image
+  - publish
+
+include:
+  - local: .gitlab/ci/security.yml
+  - local: .gitlab/ci/validate.yml
+  - local: .gitlab/ci/test.yml
+  - local: .gitlab/ci/image.yml
+  - local: .gitlab/ci/publish.yml
