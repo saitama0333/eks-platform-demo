@@ -482,6 +482,30 @@ Karpenter pause in Git and push it before scaling down compute.
 
 ### Pause dev
 
+For the normal overnight pause, use the helper from Git Bash at the repository
+root:
+
+```bash
+export AWS_PROFILE=sandbox3
+bash scripts/pause-dev.sh
+```
+
+It asks for confirmation, changes the dev workload replicas and both
+Karpenter NodePool CPU limits to zero, then adds, commits, and pushes only
+those GitOps files to `develop`. It waits for Argo CD, drains Karpenter
+NodeClaims, and sets the managed node group's minimum and desired size to zero
+through the EKS API. It also changes the ignored local
+`terraform/environments/dev/terraform.tfvars` `node_min_size` to zero, so a
+later local Terraform plan will not restore the minimum while paused. The
+script stops before scaling the managed group if apps have not scaled down or
+Karpenter nodes have not drained. Keep the generated pause-state file in your
+user profile; the resume script uses it to restore the original nodegroup
+settings and find the exact pause commit.
+
+The tracked pause values and Karpenter caps are committed and pushed by the
+script. Resolve and push any changes to those same files first; the script
+checks this to avoid mixing unrelated work into the pause commit.
+
 1. Set the dev application and monitoring workload replicas to zero in their
    GitOps values/manifests. In the same change, set
    `spec.limits.cpu: "0"` in both
@@ -554,6 +578,19 @@ Karpenter pause in Git and push it before scaling down compute.
    is restored; the EKS control plane remains.
 
 ### Resume dev
+
+To resume with the matching saved state, run:
+
+```bash
+export AWS_PROFILE=sandbox3
+bash scripts/resume-dev.sh
+```
+
+The script restores the managed node group first and waits for its nodes and
+Argo CD controllers to become Ready. It then reverts and pushes the pause
+commit, which restores the saved workload replicas and Karpenter limits. The
+local Terraform minimum is restored to its pre-pause value. If the pause
+script did not complete, review its message before running resume.
 
 1. Restore the managed node group to two nodes using the AWS CLI, while the
    Karpenter NodePools are still capped:
